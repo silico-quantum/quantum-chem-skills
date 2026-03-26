@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.pyc
+.env
+.env/*
+# Data
+*.trj
+*.bin
+Miniconda3.sh
