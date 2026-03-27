@@ -7,3 +7,24 @@ __pycache__/
 *.trj
 *.bin
 Miniconda3.sh
+
+# Multiwfn temp files
+bndmat.txt
+*.cub
+*.grd
+
+# xTB temp files
+gfnff_charges
+gfnff_topo
+mdrestart
+xtbmdok
+scoord.*
+_xtb.trj
+
+# xyzrender temp frames
+_atom_frames/
+_frames/
+_local_frames/
+
+# macOS
+.DS_Store
