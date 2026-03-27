@@ -33,6 +33,13 @@ Extract and sample molecular structures from Gaussian ONIOM or XYZ files.
 - Use case: generating training data from protein-ligand complexes or crystal structures
 
 ### 5. 🎨 [xyzrender](xyzrender/)
+
+### 6. ⚡ [xTB Cluster MD](xtb-cluster-md/)
+GFN-FF / GFN2-xTB molecular dynamics for organic molecular clusters (e.g., anthracene/benzene stacking/aggregation).
+- Random cluster builder from PubChem SDF (no RDKit/packmol needed)
+- Full atom-level, COM-only, and local-cluster subset GIF animations
+- xcontrol template for NVT MD with configurable temperature/time
+- Scripts: build_cluster.py, make_animation.py, make_atom_animation.py, make_local_cluster_animation.py
 Publication-quality molecular visualization.
 - Supports XYZ, SDF, MOL2, PDB, SMILES input
 - PNG/SVG/PDF/GIF output with transparent backgrounds
@@ -68,6 +75,7 @@ cp -r gaussian multiwfn momap molecular-sampler xyzrender ~/.openclaw/skills/
 | MOMAP | MOMAP 2024A | `module load momap/2024A-openmpi` |
 | Molecular Sampler | Python ≥ 3.10 | No external dependencies |
 | xyzrender | Python ≥ 3.10 | `pip install xyzrender` |
+| xTB Cluster MD | xTB ≥ 6.5 | `conda install -c conda-forge xtb` |
 
 ## Typical Workflow
 
