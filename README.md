@@ -48,11 +48,6 @@ Publication-quality molecular visualization.
 
 ## Other Projects
 
-### OPTXC
-Exchange-correlation functional optimization toolkit with SMILES-to-XYZ conversion and pre-screening pipelines.
-
-### Molecular Orbital Analysis
-Skills for molecular orbital visualization and analysis workflows.
 
 ## Installation
 
