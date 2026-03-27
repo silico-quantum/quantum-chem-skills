@@ -2,71 +2,75 @@
 
 A collection of AI agent skills for quantum chemistry workflows, designed for [OpenClaw](https://github.com/openclaw/openclaw) agents. These skills enable AI assistants to perform and guide quantum chemical calculations, from molecular sampling to excited-state analysis.
 
+All examples are **verified and tested** with benzene (C₆H₆). See [`examples/`](examples/README.md) for full results.
+
 ## Skills
 
-### 1. 🐍 [PySCF](pyscf/)
-Python-based quantum chemistry framework — SCF, DFT, TDDFT, CASSCF, CCSD, and more.
-- **SKILL.md** — Comprehensive guide: core modules, DFT/TDDFT examples, JAX integration
-- **references/theory/** — Advanced topics: API reference, JAX integration, CASSCF/CCSD
-- **references/practice/** — Practical workflows: 2D PES scans, emission spectrum calculation
-- **scripts/** — Ready-to-use DFT calculation script
+### 1. 🐍 [PySCF](pyscf/) — DFT & TDDFT
+Python-based quantum chemistry framework.
+- Ground state: HF, KS-DFT (B3LYP, PBE0, ωB97X-D, SCAN…)
+- Excited states: LR-TDDFT, TDA, NTO analysis
+- Post-HF: MP2, CCSD, CCSD(T), CASSCF, NEVPT2
+- Solvent: ddPCM, ddCOSMO
+- Density fitting, geometry optimization
+- **Verified**: B3LYP/cc-pVDZ on benzene → E=-232.2627 Ha, gap=6.74 eV
 
-### 2. 📊 [Multiwfn](multiwfn/)
-Wave function analysis with [Multiwfn](http://sobereva.com/multiwfn/) (v3.8).
-- Orbital visualization, UV-Vis/IR/Raman spectra plotting
-- Population analysis (Mulliken, Hirshfeld, ADCH)
-- Bond order analysis, DOS/PDOS
-- Excited-state analysis, RDG weak interaction plots
-- Works with Gaussian `.fchk` output files
+### 2. 📊 [Multiwfn](multiwfn/) — Wave Function Analysis
+Comprehensive wave function analysis (v3.8).
+- Population: Hirshfeld, ADCH, CM5, CHELPG, MK, MBIS
+- Bond order: Mayer, Wiberg, LBO, FBO
+- Orbital composition, DOS/PDOS
+- UV-Vis/IR/Raman spectra (requires Gaussian/ORCA TDDFT output)
+- Excited state analysis, NTOs, RDG weak interactions
+- **Verified**: Hirshfeld charges on benzene (C=-0.040, H=+0.040)
 
-### 3. 💡 [MOMAP](momap/)
-Molecular photophysics and charge transport calculations with [MOMAP](http://www.mo-lab.cn/momap/).
-- **SKILL.md** — Full usage guide (Fluorescence, Phosphorescence, IC/ISC rates, Radiative rates)
-- **EXAMPLES.md** — Detailed workflow examples
-- **QUICKREF.md** — Quick reference card
-- Typical workflow: PySCF/Gaussian optimization → MOMAP input → rate constants → quantum yield
+### 3. 💡 [MOMAP](momap/) — Photophysics & Charge Transport
+Molecular photophysics and charge transport calculations.
+- Fluorescence/phosphorescence spectra, IC/ISC rates
+- Radiative rates, Duschinsky rotation
+- Charge transport: transfer integrals, reorganization energy
+- **Workflow**: Gaussian/PySCF → MOMAP → quantum yield
 
-### 4. 🎯 [Molecular Sampler](molecular-sampler/)
-Extract and sample molecular structures from Gaussian ONIOM or XYZ files.
-- Union-Find based molecule identification with covalent radii bond detection
-- Distance-sorted nearest-neighbor oligomer sampling (dimers through pentamers)
-- Standard XYZ output format
-- Use case: generating training data from protein-ligand complexes or crystal structures
+### 4. 🎯 [Molecular Sampler](molecular-sampler/) — Structure Sampling
+Extract and sample molecular structures from cluster XYZ files.
+- Union-Find molecule identification with covalent radii
+- Distance-sorted nearest-neighbor oligomer sampling
+- Monomers through pentamers, standard XYZ output
+- **Verified**: 12-mol benzene cluster → 12 monomers + 5 each di/tri/tetra/pentamers
 
-### 5. 🎨 [xyzrender](xyzrender/)
-Publication-quality molecular visualization.
-- Supports XYZ, SDF, MOL2, PDB, SMILES input
+### 5. 🎨 [xyzrender](xyzrender/) — Molecular Visualization
+Publication-quality molecular graphics from the command line.
 - PNG/SVG/PDF/GIF output with transparent backgrounds
-- Color rendering with bond order display
-- Batch processing support
+- Bond orders, Kekulé structures, VdW spheres, depth fog
+- MO rendering, ESP/NCI surface visualization
+- **Verified**: 5 render styles of benzene (basic, transparent, bonds, hires, SVG)
 
-### 6. ⚡ [xTB Cluster MD](xtb-cluster-md/)
-GFN-FF / GFN2-xTB molecular dynamics for organic molecular clusters (e.g., anthracene/benzene stacking/aggregation).
-- Random cluster builder from PubChem SDF (no RDKit/packmol needed)
-- Full atom-level, COM-only, and local-cluster subset GIF animations
-- xcontrol template for NVT MD with configurable temperature/time
-- Scripts: build_cluster.py, make_animation.py, make_atom_animation.py, make_local_cluster_animation.py
+### 6. ⚡ [xTB Cluster MD](xtb-cluster-md/) — Molecular Dynamics
+GFN-FF/GFN2-xTB MD for organic molecular clusters.
+- Random cluster builder from PubChem SDF
+- Three animation types: atom-level, COM overview, local cluster subset
+- **Verified**: 8 benzene, GFN-FF, 300K, 5ps → 3 GIF animations
+
+## Other Skills
+
+### [Molecular Orbital Analysis](molecular-orbital-analysis-skill/)
+Complete workflow: PySCF → Multiwfn → PyMOL for orbital visualization.
 
 ## Installation
 
 ```bash
 git clone https://github.com/silico-quantum/quantum-chem-skills.git
-```
-
-Each skill is self-contained. Install them into your OpenClaw skills directory:
-
-```bash
 cp -r pyscf multiwfn momap molecular-sampler xyzrender xtb-cluster-md ~/.openclaw/skills/
 ```
 
 ## Software Dependencies
 
-| Skill | Required Software | Notes |
-|-------|------------------|-------|
+| Skill | Software | Install |
+|-------|----------|---------|
 | PySCF | PySCF ≥ 2.5 | `pip install pyscf` |
-| Multiwfn | Multiwfn ≥ 3.8 | `brew install multiwfn` or download |
+| Multiwfn | Multiwfn ≥ 3.8 | [Download](http://sobereva.com/multiwfn/) or `brew install multiwfn` |
 | MOMAP | MOMAP 2024A | `module load momap/2024A-openmpi` |
-| Molecular Sampler | Python ≥ 3.10 | No external dependencies |
+| Molecular Sampler | Python ≥ 3.10 | No dependencies |
 | xyzrender | Python ≥ 3.10 | `pip install xyzrender` |
 | xTB Cluster MD | xTB ≥ 6.5 | `conda install -c conda-forge xtb` |
 
@@ -84,6 +88,10 @@ Multiwfn              MOMAP
 (wave function     (photophysics &
  analysis)          charge transport)
 ```
+
+## Examples
+
+See [`examples/`](examples/README.md) for verified benzene examples with actual output files and results.
 
 ## License
 
