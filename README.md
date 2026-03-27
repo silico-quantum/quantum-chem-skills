@@ -4,11 +4,12 @@ A collection of AI agent skills for quantum chemistry workflows, designed for [O
 
 ## Skills
 
-### 1. 🧪 [Gaussian](gaussian/)
-Comprehensive Gaussian quantum chemistry calculation skill.
-- **SKILL.md** — Basic usage: connecting to HPC, input file format, Slurm submission
-- **KEYWORDS.md** — Quick reference for functionals, basis sets, TDDFT, SCRF, optimization options
-- **ADVANCED.md** — Advanced topics: CASSCF, CCSD(T), EOMCCSD, custom basis sets (Gen/GenECP), SCRF models (PCM/IEFPCM/SMD/COSMO), NBO analysis, ONIOM, IOp internals
+### 1. 🐍 [PySCF](pyscf/)
+Python-based quantum chemistry framework — SCF, DFT, TDDFT, CASSCF, CCSD, and more.
+- **SKILL.md** — Comprehensive guide: core modules, DFT/TDDFT examples, JAX integration
+- **references/theory/** — Advanced topics: API reference, JAX integration, CASSCF/CCSD
+- **references/practice/** — Practical workflows: 2D PES scans, emission spectrum calculation
+- **scripts/** — Ready-to-use DFT calculation script
 
 ### 2. 📊 [Multiwfn](multiwfn/)
 Wave function analysis with [Multiwfn](http://sobereva.com/multiwfn/) (v3.8).
@@ -23,7 +24,7 @@ Molecular photophysics and charge transport calculations with [MOMAP](http://www
 - **SKILL.md** — Full usage guide (Fluorescence, Phosphorescence, IC/ISC rates, Radiative rates)
 - **EXAMPLES.md** — Detailed workflow examples
 - **QUICKREF.md** — Quick reference card
-- Typical workflow: Gaussian optimization → MOMAP input → rate constants → quantum yield
+- Typical workflow: PySCF/Gaussian optimization → MOMAP input → rate constants → quantum yield
 
 ### 4. 🎯 [Molecular Sampler](molecular-sampler/)
 Extract and sample molecular structures from Gaussian ONIOM or XYZ files.
@@ -33,6 +34,11 @@ Extract and sample molecular structures from Gaussian ONIOM or XYZ files.
 - Use case: generating training data from protein-ligand complexes or crystal structures
 
 ### 5. 🎨 [xyzrender](xyzrender/)
+Publication-quality molecular visualization.
+- Supports XYZ, SDF, MOL2, PDB, SMILES input
+- PNG/SVG/PDF/GIF output with transparent backgrounds
+- Color rendering with bond order display
+- Batch processing support
 
 ### 6. ⚡ [xTB Cluster MD](xtb-cluster-md/)
 GFN-FF / GFN2-xTB molecular dynamics for organic molecular clusters (e.g., anthracene/benzene stacking/aggregation).
@@ -40,14 +46,6 @@ GFN-FF / GFN2-xTB molecular dynamics for organic molecular clusters (e.g., anthr
 - Full atom-level, COM-only, and local-cluster subset GIF animations
 - xcontrol template for NVT MD with configurable temperature/time
 - Scripts: build_cluster.py, make_animation.py, make_atom_animation.py, make_local_cluster_animation.py
-Publication-quality molecular visualization.
-- Supports XYZ, SDF, MOL2, PDB, SMILES input
-- PNG/SVG/PDF/GIF output with transparent backgrounds
-- Color rendering with bond order display
-- Batch processing support
-
-## Other Projects
-
 
 ## Installation
 
@@ -58,14 +56,14 @@ git clone https://github.com/silico-quantum/quantum-chem-skills.git
 Each skill is self-contained. Install them into your OpenClaw skills directory:
 
 ```bash
-cp -r gaussian multiwfn momap molecular-sampler xyzrender ~/.openclaw/skills/
+cp -r pyscf multiwfn momap molecular-sampler xyzrender xtb-cluster-md ~/.openclaw/skills/
 ```
 
 ## Software Dependencies
 
 | Skill | Required Software | Notes |
 |-------|------------------|-------|
-| Gaussian | Gaussian 16/09 | HPC cluster access |
+| PySCF | PySCF ≥ 2.5 | `pip install pyscf` |
 | Multiwfn | Multiwfn ≥ 3.8 | `brew install multiwfn` or download |
 | MOMAP | MOMAP 2024A | `module load momap/2024A-openmpi` |
 | Molecular Sampler | Python ≥ 3.10 | No external dependencies |
@@ -75,16 +73,16 @@ cp -r gaussian multiwfn momap molecular-sampler xyzrender ~/.openclaw/skills/
 ## Typical Workflow
 
 ```
-SMILES → xyz_maker → xyzrender (visualization)
-                                    ↓
-                           Molecular Sampler (extract oligomers)
-                                    ↓
-                              Gaussian (DFT/TDDFT calculation)
-                                    ↓
-                          ┌─────────┴─────────┐
-                     Multiwfn              MOMAP
-                  (wave function     (photophysics &
-                   analysis)          charge transport)
+SMILES → xyzrender (visualization)
+              ↓
+     Molecular Sampler (extract oligomers)
+              ↓
+        PySCF (DFT/TDDFT calculation)
+              ↓
+     ┌─────────┴─────────┐
+Multiwfn              MOMAP
+(wave function     (photophysics &
+ analysis)          charge transport)
 ```
 
 ## License
