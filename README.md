@@ -89,6 +89,46 @@ Multiwfn              MOMAP
  analysis)          charge transport)
 ```
 
+## Visual Gallery
+
+All figures below are generated from **actual calculations** on benzene (C₆H₆).
+
+### Molecular Structure & Orbitals
+
+<img src="examples/figures/01_benzene_structure.png" width="300" align="right">
+
+**Benzene (C₆H₆)** — D₆h symmetry, rendered with bond orders.
+
+<br clear="right">
+
+**Frontier Molecular Orbitals** (B3LYP/cc-pVDZ):
+
+<img src="examples/figures/02_orbitals.png" width="100%">
+
+### Absorption & Emission Spectra
+
+**UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states):
+
+<img src="examples/figures/03_uvvis.png" width="100%">
+
+**Absorption & Emission** with Stokes shift and spectral overlap:
+
+<img src="examples/figures/04_abs_em.png" width="100%">
+
+### Potential Energy Surfaces
+
+**S₀ & S₁ PES** along C–C bond stretch (B3LYP/STO-3G + TDA):
+
+<img src="examples/figures/05_pes.png" width="100%">
+
+### Molecular Dynamics Aggregation
+
+**Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps):
+
+<img src="examples/figures/06_md.png" width="100%">
+
+---
+
 ## Examples
 
 See [`examples/`](examples/README.md) for verified benzene examples with actual output files and results.
