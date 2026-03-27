@@ -2,13 +2,15 @@
 
 Benzene visualization examples using xyzrender CLI.
 
+**Tested**: 2026-03-27, macOS arm64
+
 ## Preparation
 
 ```bash
 # Create benzene.xyz
 cat > benzene.xyz << 'XYZEOF'
 12
-Benzene D6h
+Benzene
 C   0.000000   1.395000   0.000000
 C   1.208543   0.697500   0.000000
 C   1.208543  -0.697500   0.000000
@@ -27,51 +29,68 @@ XYZEOF
 ## Basic Render
 
 ```bash
-xyzrender benzene.xyz --png benzene_basic.png
-xyzrender benzene.xyz --png benzene_color.png --color
-xyzrender benzene.xyz --png benzene_transparent.png --transparent --color
-xyzrender benzene.xyz --png benzene_bonds.png --transparent --color --bond-order
-```
+# Default PNG (white background, 800x900)
+xyzrender benzene.xyz -o benzene_basic.png
 
-## High Resolution
+# Transparent background
+xyzrender benzene.xyz -o benzene_transparent.png -t
 
-```bash
-xyzrender benzene.xyz --png benzene_hires.png --transparent --color --bond-order --scale 2.0
-xyzrender benzene.xyz --png benzene_ultra.png --transparent --color --bond-order --scale 3.0
+# Bond orders (aromatic = 1.5 shown)
+xyzrender benzene.xyz -o benzene_bonds.png -t --bo
+
+# Kekule structures (alternating single/double)
+xyzrender benzene.xyz -o benzene_kekule.png -t --bo -k
+
+# High resolution (1000x1000 canvas)
+xyzrender benzene.xyz -o benzene_hires.png -t --bo -S 1000
 ```
 
 ## Different Input Formats
 
 ```bash
-xyzrender benzene.sdf --png benzene_from_sdf.png --transparent --color --bond-order
-xyzrender "SMILES:c1ccccc1" --png benzene_smiles.png --transparent --color
-xyzrender benzene.pdb --png benzene_pdb.png --transparent --color --bond-order
+# From SMILES
+xyzrender --smi "c1ccccc1" -o benzene_smiles.png -t
+
+# From SDF
+xyzrender benzene.sdf -o benzene_from_sdf.png -t
+
+# From PDB
+xyzrender benzene.pdb -o benzene_pdb.png -t
 ```
 
 ## Output Formats
 
+Output format is auto-detected from file extension:
 ```bash
-xyzrender benzene.xyz --svg benzene.svg --transparent --color --bond-order
-xyzrender benzene.xyz --pdf benzene.pdf --transparent --color --bond-order
-xyzrender benzene.xyz --gif benzene.gif --transparent --color --bond-order
+xyzrender benzene.xyz -o benzene.svg       # SVG vector
+xyzrender benzene.xyz -o benzene.pdf       # PDF
+xyzrender benzene.xyz -o benzene.gif       # GIF
 ```
 
-## Option Reference
+## CLI Options Reference
 
-| Option | Effect | Recommended |
-|--------|--------|-------------|
-| `--png` | PNG output | Default |
-| `--transparent` | Transparent background | Papers |
-| `--color` | CPK element coloring | Clarity |
-| `--bond-order` | Show single/double bonds | Organic molecules |
-| `--scale 2.0` | 2x resolution | Publication |
-| `--svg` | Vector format | Scalable figures |
+| Option | Description |
+|--------|-------------|
+| `-o FILE` | Output file (PNG/SVG/PDF/GIF) |
+| `-t` | Transparent background |
+| `--bo` | Show bond orders |
+| `-k` | Kekule bond pattern |
+| `-S SIZE` | Canvas size (pixels, square) |
+| `-a` | Atom scale |
+| `-b` | Bond width |
+| `-s` | Atom stroke width |
+| `--fog` | Depth fog effect |
+| `--vdw` | Van der Waals spheres |
+| `--mo` | Render molecular orbitals |
+| `--measure d` | Print bond distances |
+| `--measure a` | Print bond angles |
+| `--rebuild` | Re-detect bonds |
+| `--orient` | Auto-orient molecule |
 
 ## Batch Processing
 
 ```bash
-mkdir -p renders
 for mol in benzene toluene naphthalene anthracene; do
-    xyzrender ${mol}.xyz --png renders/${mol}.png --transparent --color --bond-order --scale 2.0
+    xyzrender ${mol}.xyz -o renders/${mol}.png -t --bo -S 1000
 done
 ```
