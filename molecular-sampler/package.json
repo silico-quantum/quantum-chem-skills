@@ -1,0 +1,21 @@
+{
+  "name": "molecular-sampler",
+  "version": "1.0.0",
+  "description": "Sample monomers and multi-molecule complexes from Gaussian ONIOM or XYZ files",
+  "main": "molecular_sampler.py",
+  "scripts": {
+    "sample": "python3 molecular_sampler.py"
+  },
+  "keywords": [
+    "chemistry",
+    "sampling",
+    "molecules",
+    "gaussian",
+    "oniom"
+  ],
+  "author": "Silico",
+  "license": "MIT",
+  "dependencies": {
+    "python": ">=3.7"
+  }
+}
