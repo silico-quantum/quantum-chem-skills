@@ -36,7 +36,7 @@ future repos                    →  Application-specific tools (dye design, OLE
 
 These skills enable AI assistants and researchers to perform quantum chemical calculations through a consistent, documented interface. Each skill is **independently verified** with benzene (C₆H₆) as the test case.
 
-All calculation examples shown below are from **actual computations** — not mock-ups.
+All figures below are from **actual computations** — not mock-ups.
 
 ## Skills
 
@@ -103,46 +103,45 @@ Complete workflow: PySCF → Multiwfn → PyMOL for orbital visualization.
 
 ## 🖼️ Visual Gallery
 
-All figures below are generated from **actual calculations** on benzene (C₆H₆).
+All figures generated from **actual calculations** on benzene (C₆H₆).
 
-<details>
-<summary><b>Click to expand all figures</b></summary>
+### Molecular Structure & Frontier Orbitals
 
-### Molecular Structure & Orbitals
+<img src="examples/figures/01_benzene_structure.png" width="220" align="right">
 
-<img src="examples/figures/01_benzene_structure.png" width="300" align="right">
-
-**Benzene (C₆H₆)** — D₆h symmetry, rendered with bond orders.
+**Benzene (C₆H₆)** — D₆h symmetry, xyzrender with bond orders. All calculations verified at B3LYP/cc-pVDZ level.
 
 <br clear="right">
 
-**Frontier Molecular Orbitals** (B3LYP/cc-pVDZ):
+**Frontier Molecular Orbitals** — HOMO-1, HOMO, LUMO (PySCF B3LYP/cc-pVDZ, rendered with xyzrender `--mo --flat-mo --iso 0.04`):
 
 <img src="examples/figures/02_orbitals.png" width="100%">
 
 ### Absorption & Emission Spectra
 
-**UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states):
+**UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states, Gaussian broadening σ = 0.15 eV):
 
-<img src="examples/figures/03_uvvis.png" width="100%">
+<img src="examples/figures/03_uvvis.png" width="48%" align="left">
 
-**Absorption & Emission** with Stokes shift and spectral overlap:
+**Absorption & Emission** with Stokes shift and spectral overlap integral:
 
-<img src="examples/figures/04_abs_em.png" width="100%">
+<img src="examples/figures/04_abs_em.png" width="48%" align="right">
 
-### Potential Energy Surfaces
+<br clear="both">
 
-**S₀ & S₁ PES** along C–C bond stretch (B3LYP/STO-3G + TDA):
+### Potential Energy Surface
+
+**2D PES Scan** along C–C and C–H bond stretches (B3LYP/STO-3G + TDA, 25×25 grid):
 
 <img src="examples/figures/05_pes.png" width="100%">
 
-### Molecular Dynamics Aggregation
+Three panels show S₀, S₁, and ΔE landscapes, revealing the vibronic coupling between ground and excited states.
 
-**Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps):
+### Molecular Dynamics
+
+**Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps) — aggregation behavior analysis:
 
 <img src="examples/figures/06_md.png" width="100%">
-
-</details>
 
 ## 🚀 Quick Start
 
