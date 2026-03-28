@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# RDKit outputs
+*.xyz
+*.sdf
+*.mol
+*.mol2
+*.pdb
+*.png
+*.jpg
+*.pdf
+
+# PySCF outputs
+*.cube
+*.chk
+*.fchk
+
+# Data files
+*.csv
+*.json
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
