@@ -131,17 +131,48 @@ All figures generated from **actual calculations** on benzene (C₆H₆).
 
 ### Molecular Structure & Frontier Orbitals
 
+**Using xyzrender skill:**
+
 <img src="examples/figures/01_benzene_structure.png" width="220" align="right">
 
 **Benzene (C₆H₆)** — D₆h symmetry, xyzrender with bond orders. All calculations verified at B3LYP/cc-pVDZ level.
 
 <br clear="right">
 
+**Using PySCF + xyzrender skills:**
+
 **Frontier Molecular Orbitals** — HOMO-1, HOMO, LUMO (PySCF B3LYP/cc-pVDZ, rendered with xyzrender `--mo --flat-mo --iso 0.04`):
 
 <img src="examples/figures/02_orbitals.png" width="100%">
 
+
+### Molecular Analysis & Visualization (RDKit)
+
+<p align="center">
+  <img src="rdkit-chemistry/examples/benzene_showcase_2d.png" width="22%" alt="2D Structure">
+  <img src="rdkit-chemistry/examples/benzene_showcase_charges.png" width="22%" alt="Charge Distribution">
+  <img src="rdkit-chemistry/examples/benzene_showcase_aromatic.png" width="22%" alt="Aromatic System">
+  <img src="rdkit-chemistry/examples/benzene_showcase_3d.png" width="22%" alt="3D Structure">
+</p>
+
+**Analysis using RDKit Chemistry skill:**
+
+- **2D Structure** — Molecular formula and atom indices
+- **Charge Distribution** — Gasteiger charges (C: -0.062, H: +0.062)
+- **Aromatic System** — π-electron delocalization (6 C atoms)
+- **3D Structure** — MMFF94-optimized geometry
+
+**Molecular Descriptors**:
+```
+Formula:  C6H6
+MW:       78.11 Da
+LogP:     1.69
+TPSA:     0.00 Å²
+```
+
 ### Absorption & Emission Spectra
+
+**Using PySCF (TDDFT) + Multiwfn skills:**
 
 **UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states, Gaussian broadening σ = 0.15 eV):
 
@@ -155,6 +186,8 @@ All figures generated from **actual calculations** on benzene (C₆H₆).
 
 ### Potential Energy Surface
 
+**Using PySCF skill:**
+
 **2D PES Scan** along C–C and C–H bond stretches (B3LYP/STO-3G + TDA, 25×25 grid):
 
 <img src="examples/figures/05_pes.png" width="100%">
@@ -162,6 +195,8 @@ All figures generated from **actual calculations** on benzene (C₆H₆).
 Three panels show S₀, S₁, and ΔE landscapes, revealing the vibronic coupling between ground and excited states.
 
 ### Molecular Dynamics
+
+**Using xTB Cluster MD skill:**
 
 **Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps) — aggregation behavior analysis:
 
