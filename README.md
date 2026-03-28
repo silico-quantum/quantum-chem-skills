@@ -176,13 +176,11 @@ TPSA:     0.00 Å²
 
 **UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states, Gaussian broadening σ = 0.15 eV):
 
-<img src="examples/figures/03_uvvis.png" width="48%" align="left">
+<img src="examples/figures/03_uvvis.png" width="100%">
 
-**Absorption & Emission** with Stokes shift and spectral overlap integral:
+**Absorption & Emission with Stokes Shift** — Spectral overlap integral:
 
-<img src="examples/figures/04_abs_em.png" width="48%" align="right">
-
-<br clear="both">
+<img src="examples/figures/04_abs_em.png" width="100%">
 
 ### Potential Energy Surface
 
