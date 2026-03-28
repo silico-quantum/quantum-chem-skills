@@ -1,19 +1,119 @@
 # RDKit Chemistry Analysis Skill
 
-RDKit-based molecular analysis and visualization for OpenClaw.
+<div align="center">
+
+![RDKit](https://img.shields.io/badge/RDKit-2023.03+-blue)
+![Python](https://img.shields.io/badge/Python-3.8+-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+**Molecular structure analysis and visualization using RDKit**
+
+[Features](#features) • [Quick Start](#quick-start) • [Examples](#examples) • [Documentation](#documentation)
+
+</div>
+
+---
+
+## Showcase: Benzene (C₆H₆) Visualization
+
+### 🎨 2D Structure
+
+<p align="center">
+  <img src="examples/benzene_showcase_2d.png" width="400" title="2D Structure">
+  <img src="examples/benzene_showcase_2d_h.png" width="400" title="2D with Hydrogens">
+</p>
+
+**Left**: Clean 2D representation  
+**Right**: With explicit hydrogens
+
+---
+
+### 🔬 Charge Distribution (Gasteiger)
+
+<p align="center">
+  <img src="examples/benzene_showcase_charges.png" width="600" title="Charge Distribution">
+</p>
+
+**Color mapping**:
+- 🔴 **Red** → Negative charge (C atoms: -0.062)
+- ⚪ **White** → Neutral
+- 🔵 **Blue** → Positive charge (H atoms: +0.062)
+
+---
+
+### 💠 Aromatic System
+
+<p align="center">
+  <img src="examples/benzene_showcase_aromatic.png" width="400" title="Aromatic System">
+</p>
+
+**Aromatic ring** highlighted in blue
+
+---
+
+### 🧊 3D Structure (xyzrender)
+
+<p align="center">
+  <img src="examples/benzene_showcase_3d.png" width="500" title="3D Structure">
+</p>
+
+**Rendered with xyzrender** (transparent background, bond orders shown)
+
+---
+
+### 📊 Molecular Descriptors
+
+```python
+Molecular formula:  C6H6
+Molecular weight:   78.11 Da
+LogP:               1.69
+TPSA:               0.00 Å²
+H-bond donors:      0
+H-bond acceptors:   0
+Rotatable bonds:    0
+Aromatic rings:     1
+```
+
+---
 
 ## Features
 
-- ✅ **3D Conformer Generation**: ETKDG algorithm with MMFF94/UFF optimization
-- ✅ **Molecular Descriptors**: LogP, TPSA, MW, H-bonding, rotatable bonds
-- ✅ **Charge Calculation**: Gasteiger charges (fast, empirical)
-- ✅ **Non-Covalent Interactions**: π-π stacking, H-bond analysis
-- ✅ **Visualization**: 2D structures, 3D rendering with xyzrender
-- ✅ **D-A Analysis**: Donor-acceptor system analysis for TADF materials
+✅ **3D Conformer Generation**
+- ETKDG algorithm
+- MMFF94/UFF force field optimization
+- Energy minimization
+
+✅ **Molecular Descriptors**
+- LogP, TPSA, molecular weight
+- Hydrogen bonding (donors/acceptors)
+- Rotatable bonds
+- Aromatic ring detection
+
+✅ **Charge Calculation**
+- Gasteiger charges (empirical, fast)
+- Mulliken charges (with PySCF)
+
+✅ **Non-Covalent Interactions**
+- π-π stacking analysis
+- Hydrogen bond identification
+- Donor-acceptor analysis (TADF)
+
+✅ **Visualization**
+- 2D structures with highlighting
+- 3D rendering (xyzrender)
+- Charge distribution maps
+- Aromatic system visualization
+
+✅ **Integration**
+- PySCF for DFT calculations
+- xyzrender for 3D visualization
+- Multiwfn for wavefunction analysis
+
+---
 
 ## Quick Start
 
-### Basic Molecular Analysis
+### 1. Basic Molecular Analysis
 
 ```python
 from rdkit import Chem
@@ -33,33 +133,7 @@ print(f"LogP: {Descriptors.MolLogP(mol):.2f}")
 print(f"TPSA: {Descriptors.TPSA(mol):.2f}")
 ```
 
-### Visualization
-
-```python
-from rdkit.Chem.Draw import rdMolDraw2D
-
-# 2D structure
-drawer = rdMolDraw2D.MolDraw2DCairo(600, 400)
-drawer.DrawMolecule(mol)
-drawer.FinishDrawing()
-drawer.WriteDrawingText("molecule.png")
-```
-
-### Export for xyzrender
-
-```python
-# Export to SDF (preserves bonds)
-writer = Chem.SDWriter("molecule.sdf")
-writer.write(mol)
-writer.close()
-
-# Then use xyzrender
-# xyzrender molecule.sdf -o molecule.png --transparent --bo
-```
-
-## Advanced Usage
-
-### Charge Analysis
+### 2. Charge Calculation
 
 ```python
 AllChem.ComputeGasteigerCharges(mol)
@@ -69,17 +143,110 @@ for atom in mol.GetAtoms():
     print(f"{atom.GetSymbol()}: {charge:.3f}")
 ```
 
-### π-π Stacking Analysis
+### 3. Visualization
 
 ```python
-ring_info = mol.GetRingInfo()
-aromatic_rings = [ring for ring in ring_info.AtomRings()
-                  if all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring)]
+from rdkit.Chem.Draw import rdMolDraw2D
 
-print(f"Aromatic rings: {len(aromatic_rings)}")
+# 2D structure
+drawer = rdMolDraw2D.MolDraw2DCairo(800, 800)
+drawer.DrawMolecule(mol)
+drawer.FinishDrawing()
+drawer.WriteDrawingText("molecule.png")
 ```
 
-### Combining with PySCF
+### 4. 3D Rendering (with xyzrender)
+
+```python
+# Export to SDF
+writer = Chem.SDWriter("molecule.sdf")
+writer.write(mol)
+writer.close()
+
+# Then in shell:
+# xyzrender molecule.sdf -o molecule.png --transparent --bo
+```
+
+---
+
+## Examples
+
+See `examples/` directory:
+
+- **`demo_molecule_opt.py`** - Conformer generation and optimization
+- **`molecular_descriptors.py`** - Descriptor calculation and analysis
+- **`nci_visualization.py`** - Non-covalent interaction analysis
+- **`advanced_quantum_calc.py`** - Combining RDKit with PySCF
+- **`benzene_showcase.py`** - Complete visualization showcase (this example)
+
+---
+
+## Installation
+
+### Using conda (recommended)
+
+```bash
+conda install -c conda-forge rdkit
+```
+
+### Using pip
+
+```bash
+pip install rdkit
+```
+
+### Optional dependencies
+
+```bash
+# For DFT calculations
+pip install pyscf
+
+# For 3D visualization
+pip install xyzrender
+```
+
+---
+
+## Documentation
+
+- **SKILL.md** - Complete skill documentation
+- **README.md** - This file
+- **examples/** - Example scripts
+
+### Common Patterns
+
+#### Pattern 1: Quick Analysis
+
+```python
+def analyze_molecule(smiles):
+    mol = Chem.MolFromSmiles(smiles)
+    mol = Chem.AddHs(mol)
+    
+    AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+    AllChem.MMFFOptimizeMolecule(mol)
+    
+    return {
+        'MW': Descriptors.ExactMolWt(mol),
+        'LogP': Descriptors.MolLogP(mol),
+        'TPSA': Descriptors.TPSA(mol),
+    }
+```
+
+#### Pattern 2: Batch Screening
+
+```python
+smiles_list = ["SMILES1", "SMILES2", "SMILES3"]
+
+for smiles in smiles_list:
+    mol = Chem.MolFromSmiles(smiles)
+    # ... analysis
+```
+
+---
+
+## Integration with Other Tools
+
+### PySCF (DFT calculations)
 
 ```python
 from pyscf import gto, dft
@@ -95,48 +262,46 @@ for atom in mol.GetAtoms():
 xyz = "\n".join(coords)
 mol_pyscf = gto.M(atom=xyz, basis='6-31G')
 
-# DFT calculation
 mf = dft.RKS(mol_pyscf)
 mf.xc = 'B3LYP'
 mf.kernel()
 ```
 
-## Examples
-
-See `examples/` directory:
-- `demo_molecule_opt.py` - Conformer generation and optimization
-- `molecular_descriptors.py` - Descriptor calculation
-- `nci_visualization.py` - Non-covalent interaction analysis
-- `advanced_quantum_calc.py` - Combining RDKit with PySCF
-
-## Installation
-
-RDKit requires conda or pip:
+### xyzrender (3D visualization)
 
 ```bash
-# Using conda (recommended)
-conda install -c conda-forge rdkit
-
-# Using pip
-pip install rdkit
+xyzrender molecule.sdf -o molecule.png --transparent --bo
 ```
+
+---
 
 ## Requirements
 
 - Python >= 3.8
 - RDKit >= 2023.03
-- (Optional) PySCF for DFT calculations
-- (Optional) xyzrender for 3D visualization
+- (Optional) PySCF >= 2.0
+- (Optional) xyzrender >= 1.0
+
+---
 
 ## License
 
 MIT
 
+---
+
 ## References
 
-- RDKit: https://www.rdkit.org/
-- MMFF94: Halgren, J. Comput. Chem. 1996, 17, 490-519
+- RDKit Documentation: https://www.rdkit.org/docs/
+- MMFF94 Paper: Halgren, J. Comput. Chem. 1996, 17, 490-519
 - Gasteiger Charges: Gasteiger & Marsili, Tetrahedron 1980, 36, 3219-3228
 
 ---
-*Created by Silico (AI Agent) - 2026-03-28*
+
+<div align="center">
+
+**Created by Silico (AI Agent)** 🔮
+
+*Part of the [quantum-chem-skills](https://github.com/silico-quantum/quantum-chem-skills) collection*
+
+</div>
