@@ -54,76 +54,76 @@ Python-based quantum chemistry framework.
 
 ### 2. 🧬 [RDKit Chemistry](rdkit-chemistry/) — Molecular Analysis ⭐ NEW
 
-Comprehensive molecular structure analysis and visualization.
-
-#### Showcase: Benzene (C₆H₆)
+Molecular conformer generation, descriptors, and visualization.
 
 <p align="center">
-  <img src="rdkit-chemistry/examples/benzene_showcase_2d.png" width="24%" alt="2D Structure">
-  <img src="rdkit-chemistry/examples/benzene_showcase_charges.png" width="24%" alt="Charge Distribution">
-  <img src="rdkit-chemistry/examples/benzene_showcase_aromatic.png" width="24%" alt="Aromatic System">
-  <img src="rdkit-chemistry/examples/benzene_showcase_3d.png" width="24%" alt="3D Structure">
+  <img src="rdkit-chemistry/examples/benzene_showcase_2d.png" width="22%" alt="2D">
+  <img src="rdkit-chemistry/examples/benzene_showcase_charges.png" width="22%" alt="Charges">
+  <img src="rdkit-chemistry/examples/benzene_showcase_aromatic.png" width="22%" alt="Aromatic">
+  <img src="rdkit-chemistry/examples/benzene_showcase_3d.png" width="22%" alt="3D">
 </p>
 
-**Features**:
-- **3D Conformer Generation** — ETKDG + MMFF94/UFF optimization
-- **Molecular Descriptors** — LogP, TPSA, MW, HBD/HBA
-- **Charge Calculation** — Gasteiger + Mulliken (with PySCF)
-- **Visualization** — 2D, charge maps, 3D rendering
+**Key Features**:
+- **3D Conformer Generation** — ETKDG algorithm + MMFF94/UFF force fields
+- **Molecular Descriptors** — LogP, TPSA, molecular weight, H-bond donors/acceptors
+- **Charge Calculation** — Gasteiger (fast) + Mulliken (DFT-level via PySCF)
+- **Non-Covalent Interactions** — π-π stacking and hydrogen bond analysis
+- **Visualization** — 2D structures, charge distribution maps, 3D rendering
 
 [→ Full Documentation](rdkit-chemistry/README.md)
 
----
-
 ### 3. 📊 [Multiwfn](multiwfn/) — Wave Function Analysis
 
-Comprehensive wave function analysis (v3.8).
+Advanced wave function analysis (v3.8).
 
-- **Population**: Hirshfeld, ADCH, CM5, CHELPG, MK, MBIS
-- **Bond order**: Mayer, Wiberg, LBO, FBO
-- Orbital composition, DOS/PDOS
-- UV-Vis/IR/Raman spectra (requires Gaussian/ORCA TDDFT output)
-- Excited state analysis, NTOs, RDG weak interactions
+- **Population**: Hirshfeld, ADCH, CM5, CHELPG, MK, MBIS charges
+- **Bond order**: Mayer, Wiberg, LBO, FBO analysis
+- **Spectroscopy**: UV-Vis, IR, Raman (Gaussian/ORCA output)
+- **Special features**: Orbital composition, DOS/PDOS, NTOs, RDG weak interactions
 - ✅ Verified: Hirshfeld charges on benzene (C = -0.040, H = +0.040)
 
 ### 4. 💡 [MOMAP](momap/) — Photophysics & Charge Transport
 
 Molecular photophysics and charge transport calculations.
 
-- Fluorescence/phosphorescence spectra, IC/ISC rates
-- Radiative rates, Duschinsky rotation
-- Charge transport: transfer integrals, reorganization energy
-- **Workflow**: Gaussian/PySCF → MOMAP → quantum yield
+- **Spectra**: Fluorescence/phosphorescence with vibronic resolution
+- **Rates**: Radiative/non-radiative (IC/ISC) rate constants
+- **Transport**: Transfer integrals and reorganization energies
+- **Workflow**: Gaussian/PySCF → MOMAP → quantum yield prediction
 
 ### 5. 🎯 [Molecular Sampler](molecular-sampler/) — Structure Sampling
 
-Extract and sample molecular structures from cluster XYZ files.
+Extract and sample molecular structures from cluster files.
 
-- Union-Find molecule identification with covalent radii
-- Distance-sorted nearest-neighbor oligomer sampling
-- Monomers through pentamers, standard XYZ output
-- ✅ Verified: 12-mol benzene cluster → 12 monomers + 5 each di/tri/tetra/pentamers
+- **Molecule identification**: Union-Find with covalent radii
+- **Oligomer sampling**: Distance-sorted nearest neighbors
+- **Output**: Monomers → pentamers in standard XYZ format
+- ✅ Verified: 12-molecule benzene cluster → 12 monomers + 5 each di/tri/tetra/pentamers
 
 ### 6. 🎨 [xyzrender](xyzrender/) — Molecular Visualization
 
 Publication-quality molecular graphics from the command line.
 
-- PNG/SVG/PDF/GIF output with transparent backgrounds
-- Bond orders, Kekulé structures, VdW spheres, depth fog
-- MO rendering, ESP/NCI surface visualization
+- **Output formats**: PNG, SVG, PDF, GIF with transparent backgrounds
+- **Rendering**: Bond orders, Kekulé structures, VdW spheres, depth fog
+- **Advanced**: Molecular orbital rendering, ESP/NCI surface visualization
 - ✅ Verified: 5 render styles of benzene (basic, transparent, bonds, hires, SVG)
 
 ### 7. ⚡ [xTB Cluster MD](xtb-cluster-md/) — Molecular Dynamics
 
-GFN-FF/GFN2-xTB MD for organic molecular clusters.
+Semi-empirical MD for organic molecular clusters.
 
-- Random cluster builder from PubChem SDF
-- Three animation types: atom-level, COM overview, local cluster subset
-- ✅ Verified: 8 benzene, GFN-FF, 300K, 5ps → 3 GIF animations
+- **Force fields**: GFN-FF, GFN2-xTB for fast, accurate dynamics
+- **Cluster builder**: Random assembly from PubChem SDF files
+- **Animations**: Atom-level, center-of-mass, local cluster views
+- ✅ Verified: 8 benzene molecules, GFN-FF, 300K, 5ps → 3 GIF animations
 
 ### 8. 🔬 [Molecular Orbital Analysis](molecular-orbital-analysis-skill/)
 
-Complete workflow: PySCF → Multiwfn → PyMOL for orbital visualization.
+Complete orbital analysis workflow.
+
+- **Workflow**: PySCF → Multiwfn → PyMOL
+- **Analysis**: MO composition, energy levels, visualization
 
 ## 🖼️ Visual Gallery
 
