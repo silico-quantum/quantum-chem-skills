@@ -10,15 +10,15 @@ venv/
 dist/
 build/
 
-# RDKit outputs
+# RDKit outputs (except in examples/)
 *.xyz
 *.sdf
 *.mol
 *.mol2
 *.pdb
-*.png
-*.jpg
-*.pdf
+!examples/*.sdf
+!examples/*.png
+!examples/*.jpg
 
 # PySCF outputs
 *.cube
