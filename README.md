@@ -3,7 +3,7 @@
 A collection of open-source tools and AI agent skills for quantum chemistry workflows. Designed as **core primitives** for computational chemistry automation — from molecular sampling to excited-state analysis.
 
 <p align="center">
-  <b>SMILES → RDKit (Conformer) → PySCF (DFT/TDDFT) → Multiwfn (Analysis) → MOMAP (Photophysics)</b>
+  <b>SMILES → Sampling → PySCF (DFT/TDDFT) → Multiwfn (Analysis) → MOMAP (Photophysics)</b>
 </p>
 
 ## 🌐 Silico Quantum Ecosystem
@@ -12,82 +12,87 @@ This repository is part of the **[silico-quantum](https://github.com/silico-quan
 
 | Repository | Description |
 |------------|-------------|
-| **[quantum-chem-skills](https://github.com/silico-quantum/quantum-chem-skills)** *(this repo)* | Core quantum chemistry skills: PySCF, Multiwfn, xyzrender, MOMAP, RDKit, molecular sampling, xTB |
+| **[quantum-chem-skills](https://github.com/silico-quantum/quantum-chem-skills)** *(this repo)* | Core quantum chemistry skills: PySCF, Multiwfn, xyzrender, MOMAP, RDKit, molecular sampling, xTB cluster MD |
+| [tadf-screening](https://github.com/silico-quantum/tadf-screening) | TADF emitter screening pipeline built on top of these core skills |
+| [workspace](https://github.com/silico-quantum/workspace) | Shared workspace and experimental prototypes |
 
-## 📦 Included Skills
+**Architecture:** This repo provides the foundational building blocks. Higher-level domain pipelines (like TADF screening) compose these primitives into complete workflows:
 
-### 1. 🧬 [RDKit Chemistry](rdkit-chemistry/) — Molecular Analysis ⭐ NEW
+```
+quantum-chem-skills (this repo)  →  Core primitives
+    ├── RDKit skills             →  Molecular conformers & analysis
+    ├── PySCF skills             →  DFT/TDDFT/ΔSCF calculations
+    ├── Multiwfn skills          →  Wave function analysis
+    ├── xyzrender skills         →  Molecular visualization
+    ├── Molecular Sampler        →  Structure extraction
+    ├── xTB Cluster MD           →  Semi-empirical dynamics
+    └── MOMAP skills             →  Photophysics & transport
+         ↓
+tadf-screening                  →  Domain pipeline (composes primitives above)
+         ↓
+future repos                    →  Application-specific tools (dye design, OLED simulation...)
+```
+
+## 🧬 About
+
+These skills enable AI assistants and researchers to perform quantum chemical calculations through a consistent, documented interface. Each skill is **independently verified** with benzene (C₆H₆) as the test case.
+
+All figures below are from **actual computations** — not mock-ups.
+
+## Skills
+
+### 1. 🐍 [PySCF](pyscf/) — DFT & TDDFT
+
+Python-based quantum chemistry framework.
+
+- **Ground state**: HF, KS-DFT (B3LYP, PBE0, ωB97X-D, SCAN…)
+- **Excited states**: LR-TDDFT, TDA, NTO analysis
+- **Post-HF**: MP2, CCSD, CCSD(T), CASSCF, NEVPT2
+- **Solvent**: ddPCM, ddCOSMO
+- Density fitting, geometry optimization
+- ✅ Verified: B3LYP/cc-pVDZ on benzene → E = -232.2627 Ha, gap = 6.74 eV
+
+### 2. 🧬 [RDKit Chemistry](rdkit-chemistry/) — Molecular Analysis ⭐ NEW
 
 Comprehensive molecular structure analysis and visualization.
 
 #### Showcase: Benzene (C₆H₆)
 
 <p align="center">
-  <img src="rdkit-chemistry/examples/benzene_showcase_2d.png" width="24%">
-  <img src="rdkit-chemistry/examples/benzene_showcase_charges.png" width="24%">
-  <img src="rdkit-chemistry/examples/benzene_showcase_aromatic.png" width="24%">
-  <img src="rdkit-chemistry/examples/benzene_showcase_3d.png" width="24%">
+  <img src="rdkit-chemistry/examples/benzene_showcase_2d.png" width="24%" alt="2D Structure">
+  <img src="rdkit-chemistry/examples/benzene_showcase_charges.png" width="24%" alt="Charge Distribution">
+  <img src="rdkit-chemistry/examples/benzene_showcase_aromatic.png" width="24%" alt="Aromatic System">
+  <img src="rdkit-chemistry/examples/benzene_showcase_3d.png" width="24%" alt="3D Structure">
 </p>
 
 **Features**:
-- ✅ **3D Conformer Generation** — ETKDG algorithm + MMFF94/UFF optimization
-- ✅ **Molecular Descriptors** — LogP, TPSA, MW, HBD/HBA, rotatable bonds
-- ✅ **Charge Calculation** — Gasteiger (fast) + Mulliken (with PySCF)
-- ✅ **Non-Covalent Interactions** — π-π stacking, H-bond analysis
-- ✅ **Visualization** — 2D structures, charge maps, 3D rendering
-- ✅ **D-A System Analysis** — Donor-acceptor identification for TADF
+- **3D Conformer Generation** — ETKDG + MMFF94/UFF optimization
+- **Molecular Descriptors** — LogP, TPSA, MW, HBD/HBA
+- **Charge Calculation** — Gasteiger + Mulliken (with PySCF)
+- **Visualization** — 2D, charge maps, 3D rendering
 
-**Benzene Analysis Results**:
-```python
-Molecular formula:  C6H6
-MW:                 78.11 Da
-LogP:               1.69
-TPSA:               0.00 Å²
-Aromatic rings:     1
-
-Gasteiger Charges:
-  C atoms:  -0.062 (electron-rich, red)
-  H atoms:  +0.062 (electron-poor, blue)
-```
-
-**Integration**: Seamlessly connects to PySCF for DFT calculations and xyzrender for 3D visualization.
-
-[→ See RDKit README](rdkit-chemistry/README.md)
+[→ Full Documentation](rdkit-chemistry/README.md)
 
 ---
 
-### 2. 🧪 [PySCF](pyscf/) — Quantum Chemistry Engine
+### 3. 📊 [Multiwfn](multiwfn/) — Wave Function Analysis
 
-Core DFT and wavefunction methods for electronic structure calculations.
+Comprehensive wave function analysis (v3.8).
 
-- **Methods**: HF, DFT, MP2, CCSD(T), CASSCF, TDDFT, EOM-CC
-- **Basis sets**: STO-3G → cc-pVQZ, including ECPs
-- **Features**: RI approximation, density fitting, solvent models (PCM)
-- **Analysis**: Population analysis, electrostatic potential, bond orders
-- **Demonstration**: Formaldehyde (H₂CO) potential energy surface, excitation energies, electron density
+- **Population**: Hirshfeld, ADCH, CM5, CHELPG, MK, MBIS
+- **Bond order**: Mayer, Wiberg, LBO, FBO
+- Orbital composition, DOS/PDOS
+- UV-Vis/IR/Raman spectra (requires Gaussian/ORCA TDDFT output)
+- Excited state analysis, NTOs, RDG weak interactions
+- ✅ Verified: Hirshfeld charges on benzene (C = -0.040, H = +0.040)
 
-**Example**: Formaldehyde TDDFT calculation → UV-Vis spectrum + emission + Stokes shift
+### 4. 💡 [MOMAP](momap/) — Photophysics & Charge Transport
 
-### 3. 📊 [Multiwfn](multiwfn/) — Wavefunction Analysis
+Molecular photophysics and charge transport calculations.
 
-Advanced analysis of wavefunctions from Gaussian, PySCF, ORCA.
-
-- **Orbital analysis**: Composition, energy levels, DOS/PDOS
-- **Electronic structure**: Mulliken, Hirshfeld, ADCH charges
-- **Bonding analysis**: Mayer bond orders, bond critical points
-- **Spectroscopy**: UV-Vis, IR, Raman spectra with broadening
-- **Special features**: Electron localization function (ELF), reduced density gradient (RDG)
-
-**Example**: 4CzIPN (TADF emitter) → Full photophysical analysis
-
-### 4. 💡 [MOMAP](momap/) — Photophysics
-
-Molecular photophysical property calculations for organic light emitters.
-
-- **Radiative & non-radiative rates**: Fluorescence, phosphorescence, IC, ISC
-- **Spectra**: Vibrationally resolved absorption and emission
-- **Reorganization energy**: Internal + external contributions
-- **Charge transport**: Transfer integrals, reorganization energy
+- Fluorescence/phosphorescence spectra, IC/ISC rates
+- Radiative rates, Duschinsky rotation
+- Charge transport: transfer integrals, reorganization energy
 - **Workflow**: Gaussian/PySCF → MOMAP → quantum yield
 
 ### 5. 🎯 [Molecular Sampler](molecular-sampler/) — Structure Sampling
@@ -118,7 +123,49 @@ GFN-FF/GFN2-xTB MD for organic molecular clusters.
 
 ### 8. 🔬 [Molecular Orbital Analysis](molecular-orbital-analysis-skill/)
 
-(Skill in development)
+Complete workflow: PySCF → Multiwfn → PyMOL for orbital visualization.
+
+## 🖼️ Visual Gallery
+
+All figures generated from **actual calculations** on benzene (C₆H₆).
+
+### Molecular Structure & Frontier Orbitals
+
+<img src="examples/figures/01_benzene_structure.png" width="220" align="right">
+
+**Benzene (C₆H₆)** — D₆h symmetry, xyzrender with bond orders. All calculations verified at B3LYP/cc-pVDZ level.
+
+<br clear="right">
+
+**Frontier Molecular Orbitals** — HOMO-1, HOMO, LUMO (PySCF B3LYP/cc-pVDZ, rendered with xyzrender `--mo --flat-mo --iso 0.04`):
+
+<img src="examples/figures/02_orbitals.png" width="100%">
+
+### Absorption & Emission Spectra
+
+**UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states, Gaussian broadening σ = 0.15 eV):
+
+<img src="examples/figures/03_uvvis.png" width="48%" align="left">
+
+**Absorption & Emission** with Stokes shift and spectral overlap integral:
+
+<img src="examples/figures/04_abs_em.png" width="48%" align="right">
+
+<br clear="both">
+
+### Potential Energy Surface
+
+**2D PES Scan** along C–C and C–H bond stretches (B3LYP/STO-3G + TDA, 25×25 grid):
+
+<img src="examples/figures/05_pes.png" width="100%">
+
+Three panels show S₀, S₁, and ΔE landscapes, revealing the vibronic coupling between ground and excited states.
+
+### Molecular Dynamics
+
+**Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps) — aggregation behavior analysis:
+
+<img src="examples/figures/06_md.png" width="100%">
 
 ## 🚀 Quick Start
 
@@ -130,20 +177,12 @@ cd quantum-chem-skills
 ### Install as OpenClaw Skills
 
 ```bash
-cp -r pyscf multiwfn momap xyzrender molecular-sampler xtb-cluster-md rdkit-chemistry ~/.openclaw/skills/
+cp -r pyscf multiwfn momap molecular-sampler xyzrender xtb-cluster-md ~/.openclaw/skills/
 ```
 
 ### Or Use Standalone
 
 Each skill directory contains its own Python scripts that can be run independently.
-
-## 📚 Documentation
-
-Each skill includes:
-- **SKILL.md** — Complete API documentation and usage patterns
-- **README.md** — Overview and quick start
-- **examples/** — Verified working examples with outputs
-- **package.json** — Skill metadata for OpenClaw integration
 
 ## ⚙️ Software Dependencies
 
@@ -152,80 +191,27 @@ Each skill includes:
 | PySCF | PySCF ≥ 2.5 | `pip install pyscf` |
 | Multiwfn | Multiwfn ≥ 3.8 | [Download](http://sobereva.com/multiwfn/) or `brew install multiwfn` |
 | MOMAP | MOMAP 2024A | `module load momap/2024A-openmpi` |
-| xyzrender | xyzrender ≥ 1.0 | `pip install xyzrender` |
-| RDKit | RDKit ≥ 2023.03 | `conda install -c conda-forge rdkit` |
-| xTB | xtb ≥ 6.4 | `conda install -c conda-forge xtb` |
+| Molecular Sampler | Python ≥ 3.10 | No dependencies |
+| xyzrender | Python ≥ 3.10 | `pip install xyzrender` |
+| xTB Cluster MD | xTB ≥ 6.5 | `conda install -c conda-forge xtb` |
 
-## 🔄 Typical Workflows
+## 📚 References
 
-### Workflow 1: TADF Material Design
+- Sun et al., *WIREs Comput. Mol. Sci.* 2020 — PySCF framework
+- Lu & Chen, *J. Comput. Chem.* 2012 — Multiwfn
+- Grimme, *JCTC* 2019 — GFN2-xTB method
+- Tian et al., *J. Chem. Theory Comput.* 2022 — MOMAP
 
-```
-1. RDKit: Generate conformers → Optimize with MMFF94
-2. PySCF: DFT geometry optimization → TDDFT excited states
-3. Multiwfn: Charge transfer analysis → Orbital composition
-4. MOMAP: Radiative/non-radiative rates → Quantum yield
-5. xyzrender: Publication-quality visualizations
-```
+## 📄 License
 
-### Workflow 2: Cluster Sampling
-
-```
-1. Molecular Sampler: Extract monomers/oligomers from cluster
-2. xTB: GFN-FF molecular dynamics
-3. xyzrender: Animate MD trajectories
-4. PySCF: DFT calculations on sampled structures
-```
-
-### Workflow 3: Photophysical Analysis
-
-```
-1. Gaussian: Ground/excited state optimization + frequencies
-2. MOMAP: Calculate IC/ISC rates, fluorescence spectrum
-3. Multiwfn: Orbital analysis, bond orders
-4. xyzrender: MO visualization, ESP surfaces
-```
-
-## 🤝 Integration with OpenClaw
-
-These skills are designed to work as **OpenClaw agent skills**:
-
-- **Automatic activation**: Say "use PySCF to optimize this molecule"
-- **Seamless handoff**: Data flows automatically between tools
-- **Error handling**: Robust fallback strategies
-- **Memory persistence**: Results stored in agent workspace
-
-## 📖 Citation
-
-If you use these tools in your research, please cite the respective software:
-
-- **RDKit**: Landrum et al., RDKit: Open-Source Cheminformatics
-- **PySCF**: Sun et al., *WIREs Comput Mol Sci* **8**, e1340 (2018)
-- **Multiwfn**: Lu & Chen, *J. Comput. Chem.* **33**, 580 (2012)
-- **MOMAP**: Niu et al., *J. Chem. Theory Comput.* **6**, 1372 (2010)
-- **xTB**: Bannwarth et al., *WIREs Comput Mol Sci* **11**, e1493 (2021)
-
-## 📜 License
-
-All skills are open-source under MIT license unless otherwise specified.
-
-## 👤 Maintainer
-
-**Silico (硅灵)** 🔮 — AI Research Partner
-
-- GitHub: [@silico-quantum](https://github.com/silico-quantum)
-- Part of the Silico Quantum ecosystem
-
-## 🌟 Star History
-
-If these tools help your research, please ⭐ star the repository!
+MIT
 
 ---
 
-<div align="center">
+**Silico (硅灵)** 🔮 — AI Research Partner
 
-**Built with 🔮 by Silico (AI Agent)**
-
-*Quantum chemistry tools for the AI age*
-
-</div>
+<p>
+  <a href="https://github.com/silico-quantum"><b>silico-quantum</b></a> ·
+  <a href="https://github.com/silico-quantum/quantum-chem-skills">quantum-chem-skills</a> ·
+  <a href="https://github.com/silico-quantum/tadf-screening">tadf-screening</a>
+</p>
