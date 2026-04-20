@@ -1,114 +1,141 @@
-# PySCF Skill
+---
+name: pyscf
+version: 2.0.0
+description: PySCF (Python-based Simulations of Chemistry Framework) — modular pure-Python quantum chemistry library. Supports HF, DFT, MP2, CCSD, CCSD(T), CASSCF, TDDFT, geometry optimization, PES scanning, and spectroscopy. Based on pyscf.org documentation.
+homepage: https://pyscf.org
+metadata:
+  category: computational_chemistry
+  tags: [quantum_chemistry, DFT, TDDFT, MP2, CCSD, CASSCF, excited_states, python]
+---
 
-## 简介
+# PySCF — Python-based Simulations of Chemistry Framework
 
-PySCF 是模块化的纯 Python 量子化学程序库，支持：
-- **波函数方法**：HF、MP2、CCSD、CCSD(T)、CASSCF、CASCI
-- **DFT**：所有标准泛函（LDA、GGA、meta-GGA、hybrids）
-- **激发态**：TDDFT、TDA、CIS、SF-DFT
-- **几何优化**：能量最小化、过渡态
-- **势能面**：内坐标扫描、 relaxed scan
-- **谱分析**：UV-Vis 吸收、发射、CD 光谱
+## Overview
 
-## 核心概念
+PySCF is an open-source pure-Python quantum chemistry package featuring:
+- **Wave function methods:** HF, MP2, MP3, CCSD, CCSD(T), CASSCF, CASCI, NEVPT2, DMRG
+- **DFT:** All standard functionals (LDA, GGA, meta-GGA, hybrid, range-separated)
+- **Excited states:** TDDFT, TDA, CIS, SF-DFT, EOM-CCSD
+- **Geometry optimization:** Energy minimization, transition states, numerical Hessians
+- **PES scanning:** Rigid scans, relaxed 1D/2D scans
+- **Spectroscopy:** UV-Vis absorption, emission, CD, Raman
+- **Periodic systems:** PBC-DFT, PBC-TDDFT
 
-### 分子定义
+**Installation:** `pip install pyscf`
+
+---
+
+## Core Concepts
+
+### Molecule Definition
+
 ```python
 from pyscf import gto
+
 mol = gto.M(
-    atom='H 0 0 0; F 0 0 1.0',  # 内联坐标
-    # atom=open('h2o.xyz').read(),   # 或从文件读取
-    basis='cc-pvdz',                # 基组
-    charge=0,                      # 电荷
-    spin=0,                        # 自旋 (0=闭壳层, 1=开壳层)
-    verbose=4                       # 输出级别
+    atom='H 0 0 0; F 0 0 1.0',   # Inline coordinates
+    # atom=open('h2o.xyz').read(),  # Or read from file
+    basis='cc-pvdz',              # Basis set
+    charge=0,                    # Molecular charge
+    spin=0,                      # Spin multiplicity (0=closed-shell singlet)
+    verbose=4                    # Output level
 )
 ```
 
-### 基组选择
-| 任务 | 推荐基组 |
-|------|---------|
-| 快速筛选 | sto-3g, 3-21G |
-| 平衡精度 | 6-31G*, cc-pVDZ |
-| 高精度 | cc-pVTZ, cc-pVQZ, def2-TZVP |
-| 重原子 | LANL2DZ, Stuttgart RSC |
+### Basis Set Selection
 
-### 常用泛函
+| Task | Recommended Basis |
+|------|-----------------|
+| Rapid screening | `sto-3g`, `3-21G` |
+| Balanced accuracy | `6-31G*`, `cc-pVDZ` |
+| High accuracy | `cc-pVTZ`, `cc-pVQZ`, `def2-TZVP` |
+| Heavy atoms | `LANL2DZ`, `Stuttgart RSC` |
+| Core excitations | `cc-pCVTZ` |
+
+### Common Functionals
+
 ```python
-# GGA
-'pbe', 'blyp', 'bp86', 'pbe0'  # PBE0 是 hybrid
+# GGA functionals
+'pbe', 'blyp', 'bp86', 'pbesol'
 
-# meta-GGA
-'tkwwl', 'scan', 'm06l'
+# Meta-GGA functionals
+'scan', 'tpss', 'm06-l'
 
-# hybrid
-'b3lyp', 'pbe0', 'm06', 'm06-2x', 'wb97x', 'wb97x-d'
+# Hybrid functionals
+'b3lyp', 'pbe0', 'm06', 'm06-2x', 'wb97x', 'wb97x-d', 'wb97x-d3bj'
 
-# dispersion
-'b3lyp-d3', 'wb97x-d3bj'
+# Range-separated functionals (best for CT/excited states)
+'wb97x', 'wb97x-d', 'wb97x-d3bj', 'camb3lyp', 'lc-wpbe'
+
+# Dispersion correction
+'b3lyp-d3', 'pbe-d3', 'wb97x-d3bj'
 ```
 
-### 运行模式
+### Running Modes
+
 ```python
 mf = scf.RHF(mol)
-mf.kernel()           # 正式运行（保存中间结果）
-mf.run()             # 同上
-mf.converged         # 检查收敛
-mf.e_tot             # 总能量
+mf.kernel()              # Explicit run
+mf.run()                 # Same as above
+mf.converged            # Check convergence
+mf.e_tot                # Total energy
 
-# 渐进式
-mf = scf.RHF(mol).newton()  # Newton-Raphson 加速
-mf = scf.RHF(mol).density_fit()  # 密度拟合加速
+# Progressive options
+mf = scf.RHF(mol).newton()          # Newton-Raphson acceleration
+mf = scf.RHF(mol).density_fit()     # Density fitting (faster)
+mf = scf.RHF(mol).x2c()             # Scalar relativistic (2-component)
 ```
 
 ---
 
-## 1. 波函数方法
+## 1. Wave Function Methods
 
 ### 1.1 Hartree-Fock (HF)
 
-**闭壳层 RHF：**
+**Restricted closed-shell RHF:**
 ```python
-from pyscf import scf
+from pyscf import scf, gto
+
 mol = gto.M(atom='H 0 0 0; F 0 0 1.0', basis='cc-pvdz')
 mf = scf.RHF(mol).run()
 print('E(RHF) =', mf.e_tot)
 ```
 
-**开壳层 ROHF/UHF：**
+**Open-shell UHF/ROHF:**
 ```python
 mol = gto.M(atom='O 0 0 0; O 0 0 1.2', spin=2, basis='cc-pvdz')  # O2 triplet
-mf = scf.UHF(mol).run()          # Unrestricted
-mf = scf.ROHF(mol).run()          # Restricted open-shell
+mf = scf.UHF(mol).run()     # Unrestricted
+mf = scf.ROHF(mol).run()    # Restricted open-shell
 ```
 
-**DHF（Dirac-Hartree-Fock，用于相对论）：**
+**Dirac-Hartree-Fock (relativistic):**
 ```python
 from pyscf import scf
 mol = gto.M(atom='Hg 0 0 0', basis='cc-pvdz')
 mf = scf.DHF(mol).run()
 ```
 
-### 1.2 MP2（二阶微扰理论）
+### 1.2 MP2 (Second-Order Møller-Plesset)
+
 ```python
 from pyscf import mp, scf, gto
 
 mol = gto.M(atom='C 0 0 0; O 0 0 1.2', basis='cc-pvdz')
 mf = scf.RHF(mol).run()
 
-# 闭壳层 MP2
+# Closed-shell MP2
 mmp = mp.MP2(mf).run()
 print('E(MP2) =', mmp.e_tot)
-print('E(corr) =', mmp.e_corr)         # 相关能
-print('T2 amplitudes shape:', mmp.t2.shape)
+print('E(corr) =', mmp.e_corr)     # Correlation energy
+print('T2 shape:', mmp.t2.shape)
 
-# 开壳层 UMP2
+# Open-shell UMP2
 mmp = mp.UMP2(mf).run()
 ```
 
 ### 1.3 CCSD / CCSD(T)
 
-**CCSD（耦合簇单双）：**
+**CCSD (Coupled-Cluster Singles and Doubles):**
 ```python
 from pyscf import cc, scf, gto
 
@@ -117,20 +144,20 @@ mf = scf.RHF(mol).run()
 
 mycc = cc.CCSD(mf).run()
 print('E(CCSD) =', mycc.e_tot)
-print('T1 amplitudes:', mycc.t1.shape)
-print('T2 amplitudes:', mycc.t2.shape)
+print('T1 shape:', mycc.t1.shape)
+print('T2 shape:', mycc.t2.shape)
 
-# 计算单粒子密度矩阵
+# One-particle density matrix
 dm = mycc.make_rdm1()
 ```
 
-**CCSD(T)（考虑三次项）：**
+**CCSD(T) (perturbative triples):**
 ```python
-eccsd_t = cc.CCSD(mf).ccsd_t()  # 返回修正值 ΔE
-e_total = mycc.e_tot + eccsd_t
+et = cc.CCSD(mf).ccsd_t()    # Returns ΔE
+e_total = mycc.e_tot + et
 ```
 
-**开壳层 UCCSD：**
+**Unrestricted UCCSD:**
 ```python
 mol = gto.M(atom='N 0 0 0', spin=1, basis='cc-pvdz')
 mf = scf.UHF(mol).run()
@@ -139,111 +166,106 @@ mycc = cc.UCCSD(mf).run()
 
 ### 1.4 CASSCF / CASCI
 
-**CASSCF（完全活化空间 SCF）：**
+**CASSCF (Complete Active Space SCF):**
 ```python
 from pyscf import mcscf, scf, gto
 
 mol = gto.M(atom='C 0 0 0; O 0 0 1.2', basis='cc-pvdz')
 mf = scf.RHF(mol).run()
 
-# CAS(nelec, ncas) = CASSCF
-# 10 电子, 8 个轨道活化空间
+# CAS(nelec, ncas) — 10 electrons, 8 orbital active space
 mc = mcscf.CASSCF(mf, 8, 10).run()
 print('E(CASSCF) =', mc.e_tot)
-print('CAS space orbitals:', mc.mo_coeff.shape)
+print('CAS orbitals:', mc.mo_coeff.shape)
 
-# 自定义活性空间（手动选择轨道）
+# Custom active space (manual orbital selection)
 mc = mcscf.CASSCF(mf, 8, 10)
-mo = mcscf.sort_mo(mc, mf.mo_coeff, [15,16,17,20,21,22,25,26])
+mo = mcscf.sort_mo(mc, mf.mo_coeff, [15, 16, 17, 20, 21, 22, 25, 26])
 mc.run(mo)
 ```
 
-**CASCI：**
+**CASCI:**
 ```python
 mc = mcscf.CASCI(mf, 8, 10).run()
 ```
 
-**CASSCF + 微扰修正（CASPT2）：**
+**CASPT2 (multi-state second-order perturbation):**
 ```python
 mc = mcscf.CASSCF(mf, 8, 10).run()
 mcpt2 = mcscf.CASPT2(mc).run()
 print('E(CASPT2) =', mcpt2.e_tot)
 ```
 
-**NEVPT2：**
+**NEVPT2 (N-Electron Valence Second-Order PT):**
 ```python
 mcpt2 = mcscf.NEVPT2(mc).run()
 ```
 
 ---
 
-## 2. DFT 方法
+## 2. DFT Methods
 
-### 2.1 基本 DFT 计算
+### 2.1 Basic DFT
 ```python
 from pyscf import dft
 
 mol = gto.M(atom='O 0 0 0; H 0 0 1.8; H 0 0.8 2.7', basis='cc-pvdz')
 
-# RKS = Restricted Kohn-Sham (闭壳层)
+# RKS = Restricted Kohn-Sham (closed-shell)
 mf = dft.RKS(mol, xc='pbe').run()
 print('E(PBE) =', mf.e_tot)
 
 mf = dft.RKS(mol, xc='b3lyp').run()
 print('E(B3LYP) =', mf.e_tot)
 
-# UKS = Unrestricted Kohn-Sham (开壳层)
+# UKS = Unrestricted Kohn-Sham (open-shell)
 mol = gto.M(atom='O 0 0 0', spin=2, basis='cc-pvdz')
 mf = dft.UKS(mol, xc='pbe').run()
 ```
 
-### 2.2 泛函选择指南
+### 2.2 Functional Selection Guide
+
 ```python
 xc_options = {
     # LDA
     'lda': 'svwn5',           # VWN5 Slater-VWN (RPA)
-    
+
     # GGA
-    'pbe': 'pbe',              # Perdew-Burke-Ernzerhof
-    'blyp': 'blyp',            # Becke-Lee-Yang-Parr
-    'bp86': 'bp86',            # B88 + P86
-    
-    # meta-GGA
-    'scan': 'scan',            # Strongly Constrained
-    
-    # hybrid
-    'b3lyp': 'b3lyp',         # 最常用
-    'pbe0': 'pbe0',            # PBE0 (25% HF exchange)
-    'm06': 'm06',              # Minnesota 2006
-    'm06-2x': 'm06-2x',        # 54% HF exchange
-    'wb97x': 'wb97x',          # range-separated
-    'wb97x-d3': 'wb97x-d3bj',  # with dispersion
-    
-    # dispersion correction
-    'pbe-d3': 'pbe,pbe-d3bj',  # DFT-D3 BJ
+    'pbe': 'pbe',             # Perdew-Burke-Ernzerhof
+    'blyp': 'blyp',           # Becke-Lee-Yang-Parr
+    'bp86': 'bp86',           # B88 + P86
+
+    # Meta-GGA
+    'scan': 'scan',           # Strongly Constrained
+
+    # Hybrid
+    'b3lyp': 'b3lyp',         # Most popular
+    'pbe0': 'pbe0',           # 25% HF exchange
+    'm06': 'm06',             # Minnesota 2006
+    'm06-2x': 'm06-2x',      # 54% HF exchange
+    'wb97x': 'wb97x',        # Range-separated
+    'wb97x-d3': 'wb97x-d3bj', # with dispersion
+
+    # Dispersion correction
+    'pbe-d3': 'pbe,pbe-d3bj',
     'b3lyp-d3': 'b3lyp,b3lyp-d3bj',
 }
 ```
 
-### 2.3 range-separated 泛函
+### 2.3 Range-Separated Functionals
 ```python
-# ωB97X-D: 长程 corrected，适合 CT 态和电荷转移
+# ωB97X-D: Long-range corrected, ideal for CT and charge-transfer states
 mf = dft.RKS(mol, xc='wb97x-d').run()
 
-# CAM-B3LYP: 长程 correction 版本
+# CAM-B3LYP: Variable range separation
 mf = dft.RKS(mol, xc='camb3lyp').run()
 ```
 
-### 2.4 轨道可视化 / DOS 分析
+### 2.4 Orbital Visualization / DOS
 ```python
-# 轨道系数
+# MO coefficients and energies
 mo_coeff = mf.mo_coeff
-mo_energy = mf.mo_energy
-
-# 绘制轨道
-from pyscf import dft
-dft.gen_grid.with_rounding = False
-dft.numint.NR_3Done = dft.numint._dot_ao_ao
+mo_energy = mf.mo_energy  # in Hartree
 
 # Mulliken population
 from pyscf import lo
@@ -254,44 +276,44 @@ mulliken = lo.mulliken(mol, dm, occ)
 
 ---
 
-## 3. 激发态：TDDFT / TDA
+## 3. Excited States: TDDFT / TDA
 
-### 3.1 TDDFT（线性响应）
+### 3.1 TDDFT (Linear Response)
 ```python
-from pyscf import tddft, dft, scf, gto
+from pyscf import tddft, dft, gto
 
 mol = gto.M(atom='C 0 0 0; N 0 0 1.2', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 
-# TDDFT 计算
+# TDDFT calculation
 td = tddft.TDDFT(mf).run()
-print('激发态能量 (eV):', td.e * 27.2114)
-print('振子强度:', td.f)
-print('S1 能量 (eV):', td.e[0] * 27.2114)
+print('Excitation energies (eV):', td.e * 27.2114)
+print('Oscillator strengths:', td.f)
+print('S1 energy (eV):', td.e[0] * 27.2114)
 
-# 计算自然跃迁轨道 (NTO)
+# Natural transition orbitals (NTO)
 td.analyze()
 ```
 
-### 3.2 TDA（单激发近似，Tamm-Dancoff）
+### 3.2 TDA (Tamm-Dancoff Approximation)
 ```python
-# TDA 比 TDDFT 快，但对 double excitation 不太准确
-td = tddft.TDA(mf).run(nstates=5)  # 默认 10 个态
+# TDA is faster than TDDFT but less accurate for double excitations
+td = tddft.TDA(mf).run(nstates=5)   # default: 10 states
 td.analyze()
 ```
 
-### 3.3 UV-Vis 光谱
+### 3.3 UV-Vis Spectrum
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 计算 50 个激发态
+# Compute 50 excited states
 td = tddft.TDDFT(mf).run(nstates=50)
 
-# 展宽光谱
-e = td.e * 27.2114  # eV
+# Broadened spectrum
+e = td.e * 27.2114   # eV
 f = td.f
-sigma = 0.1  # eV
+sigma = 0.1           # eV
 
 energies = np.linspace(0, 10, 500)
 spectrum = np.zeros_like(energies)
@@ -304,86 +326,83 @@ plt.ylabel('Oscillator strength')
 plt.show()
 ```
 
-### 3.4 开壳层 TDDFT
+### 3.4 Open-Shell TDDFT
 ```python
 mol = gto.M(atom='O 0 0 0', spin=2, basis='cc-pvdz')
 mf = dft.UKS(mol, xc='pbe').run()
 td = tddft.TDDFT(mf).run(nstates=5)
 ```
 
-### 3.5 SF-DFT（态选择 DFT，适合 diradical）
+### 3.5 SF-DFT (Spin-Flip DFT, for diradicals)
 ```python
-from pyscf import tddft
+from pyscf import tddft, dft
 mf = dft.RKS(mol, xc='b3lyp').run()
 td = tddft.TDDFT(mf).run(nstates=3)
-# 或使用 sf王爷
+
 from pyscf import df
-td_sf = df.DFTStateTransfer(mf, ['4.0', '5.0'])  # 指定能隙范围
+td_sf = df.DFTStateTransfer(mf, ['4.0', '5.0'])  # energy gap range
 ```
 
 ---
 
-## 4. 几何优化
+## 4. Geometry Optimization
 
-### 4.1 能量最小化
+### 4.1 Energy Minimization
 ```python
 from pyscf import dft, geomopt
 
 mol = gto.M(atom='O 0 0 0; H 0 0 1.8; H 0 0.8 2.7', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 
-# 标准优化
+# Standard optimization
 opt = geomopt.GeometryOptimizer(mf)
 mol_opt = opt.run()
 
-print('优化后坐标:')
+print('Optimized coordinates:')
 for i in range(mol_opt.natm):
     print(mol_opt.atom_coord(i))
 
-# 直接用 RKS 对象
+# Direct method
 mol_opt = dft.RKS(mol, xc='b3lyp').geomopt().run()
 ```
 
-### 4.2 过渡态优化
+### 4.2 Transition State Optimization
 ```python
 from pyscf import dft, geomopt
 
 mol = gto.M(atom='H 0 0 0; Cl 0 0 1.7', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 
-# 选择内坐标或直接指定
-opt = geomopt.GeometryOptimizer(mf, 'gen炒股')
-# 使用二聚体法找过渡态
+# Dimer method for transition states
 opt = geomopt.DimerOptimizer(mf).run()
 ```
 
-### 4.3 频率计算（验证极小点/过渡态）
+### 4.3 Frequency Calculation (Verify Minima / TS)
 ```python
 from pyscf import hessian
 
-# 计算 Hessian
 mol = gto.M(atom='O 0 0 0; H 0 0 1.8; H 0 0.8 2.7', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 hess = hessian.RHF(mf).run()
 
-# 频率
+# Frequencies
 freq = hess.kernel()
-print('频率 (cm⁻¹):', freq)
+print('Frequencies (cm^-1):', freq)
 ```
 
 ---
 
-## 5. 势能面（PES）扫描
+## 5. Potential Energy Surface (PES) Scanning
 
-### 5.1 Relaxed 扫描（逐步优化）
+### 5.1 Relaxed Scan (Stepwise Optimization)
 ```python
-from pyscf import dft, relaxscan
+from pyscf import dft
 import numpy as np
 
-mol = gto.M(atom='C 0 0 0; H 0 0 1.1', basis='cc-pvdz', unit='Angstrom')
+mol = gto.M(atom='C 0 0 0; H 0 0 1.1', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 
-# 扫描 C-H 键长
+# Scan C-H bond length
 scan_coords = []
 scan_energies = []
 
@@ -396,49 +415,39 @@ for r in np.linspace(0.9, 1.3, 10):
     scan_coords.append(r)
     scan_energies.append(mf_temp.e_tot)
 
-print('扫描完成')
+print('Scan complete')
 for c, e in zip(scan_coords, scan_energies):
     print(f'r={c:.3f} E={e:.6f}')
 ```
 
-### 5.2 1D 内坐标扫描
+### 5.2 2D Relaxed Scan
 ```python
-from pyscf import mcscf
-
-# 更复杂的扫描可用 as_scan
-mol = gto.M(atom='N 0 0 0; N 0 0 1.5', basis='cc-pvdz')
-mf = scf.RHF(mol).run()
-mc = mcscf.CASSCF(mf, 4, 4).run()
-
-# 扫描轨迹记录
-scan_result = mc.as_scanner()
+# Combine two internal coordinates in nested loops
 ```
 
 ---
 
-## 6. 光谱分析
+## 6. Spectroscopy
 
-### 6.1 UV-Vis 吸收光谱
+### 6.1 UV-Vis Absorption Spectrum
 ```python
 import numpy as np
 import matplotlib.pyplot as plt
 
-# 从 TDDFT 结果生成光谱
 def uv_vis_spectrum(td, nstates=50, sigma=0.05, emin=0, emax=10):
-    """生成展宽的 UV-Vis 光谱"""
-    e = td.e[:nstates] * 27.2114  # eV
+    """Generate broadened UV-Vis spectrum"""
+    e = td.e[:nstates] * 27.2114   # eV
     f = td.f[:nstates]
-    
+
     energies = np.linspace(emin, emax, 1000)
     absorption = np.zeros_like(energies)
-    
+
     for ei, fi in zip(e, f):
         if fi > 0:
             absorption += fi * np.exp(-(energies - ei)**2 / (2 * sigma**2))
-    
+
     return energies, absorption
 
-# 使用
 mol = gto.M(atom='C 0 0 0; N 0 0 1.2', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='b3lyp').run()
 td = tddft.TDDFT(mf).run(nstates=50)
@@ -450,7 +459,7 @@ plt.ylabel('Absorption (arb. units)')
 plt.show()
 ```
 
-### 6.2 发射光谱（从 S1 态）
+### 6.2 Emission Spectrum (from S1)
 ```python
 from pyscf import tddft, dft
 
@@ -458,27 +467,27 @@ mol = gto.M(atom='C 0 0 0; N 0 0 1.2', basis='cc-pvdz')
 mf = dft.RKS(mol, xc='pbe').run()
 td = tddft.TDDFT(mf).run(nstates=5)
 
-# S1 发射 = S1 态 → S0 垂直跃迁
-td.emit()  # 计算发射（实验功能）
+# S1 emission = S1 → S0 vertical transition
+td.emit()   # Compute emission (experimental feature)
 ```
 
-### 6.3 CD 光谱（圆二色谱）
+### 6.3 CD Spectrum (Circular Dichroism)
 ```python
 from pyscf import tddft, gdft
 
 mol = gto.M(atom='C 0 0 0; N 0 0 1.2', basis='cc-pvdz')
-mf = gdft.RKS(mol, xc='pbe').run()
+mf = gdft.RKS(mol, xc='pbe').run()   # Use GDFT for CD
 td = tddft.TDDFT(mf).run(nstates=20)
 
-# 旋光强度 (rotatory strength)
-td.analyze()  # 包含 rotatory strength
+# Rotatory strength
+td.analyze()
 ```
 
 ---
 
-## 7. 并行化与加速
+## 7. Parallelization & Performance
 
-### 7.1 密度拟合 (DF)
+### 7.1 Density Fitting (DF)
 ```python
 from pyscf import df, scf
 
@@ -486,23 +495,23 @@ mol = gto.M(atom='C 0 0 0; O 0 0 1.2', basis='def2-tzvp')
 mf = scf.RHF(mol).density_fit(auxbasis='def2-tzvp-ri').run()
 ```
 
-### 7.2 多线程 BLAS
+### 7.2 Multi-threaded BLAS
 ```python
 import os
 os.environ['OMP_NUM_THREADS'] = '16'
 
-# 或在运行时
+# Or at runtime
 from pyscf.lib import num_threads
 num_threads(16)
 ```
 
-### 7.3 CHK 文件（断点续算）
+### 7.3 CHK Files (Checkpoint / Restart)
 ```python
 mf = scf.RHF(mol)
 mf.chkfile = 'hf.chk'
 mf.run()
 
-# 重新加载
+# Reload
 mf = scf.RHF(mol)
 mf.init_guess = 'chk'
 mf.run(chkfile='hf.chk')
@@ -510,46 +519,46 @@ mf.run(chkfile='hf.chk')
 
 ---
 
-## 8. 常用基组速查
+## 8. Common Basis Sets
 
-| 基组 | 描述 | 适用场景 |
-|------|------|---------|
-| sto-3g | 最小基组，最快 | 快速测试 |
-| 3-21G | 分裂基组 | 小体系筛选 |
-| 6-31G* | 中等精度，有极化 | 常规有机分子 |
-| cc-pVDZ | 相关一致性基组 | MP2/CCSD |
-| cc-pVTZ | 高精度 | 精细计算 |
-| def2-TZVP | 赝势基组 | 重原子 |
-| LANL2DZ | 有效核势势 | 过渡金属 |
+| Basis Set | Description | Use Case |
+|-----------|-------------|----------|
+| `sto-3g` | Minimal basis, fastest | Quick testing |
+| `3-21G` | Split-valence | Small molecule screening |
+| `6-31G*` | Double-zeta + polarization | Standard organic molecules |
+| `cc-pVDZ` | Correlation-consistent DZ | MP2/CCSD |
+| `cc-pVTZ` | Correlation-consistent TZ | High precision |
+| `def2-TZVP` | Pseudopotential basis | Heavy atoms |
+| `LANL2DZ` | Effective core potential | Transition metals |
 
 ---
 
-## 9. 常见问题
+## 9. Troubleshooting
 
-**Q: SCF 不收敛？**
+**Q: SCF not converging?**
 ```python
-# 方法 1: 更换初始猜测
-mf.init_guess = 'atom'    # 原子密度
-mf.init_guess = 'hcore'   # 核哈密顿量
-mf.diis = True             # DIIS 加速（默认开启）
+# Method 1: Change initial guess
+mf.init_guess = 'atom'    # Atomic density
+mf.init_guess = 'hcore'   # Core Hamiltonian
+mf.diis = True            # DIIS acceleration (default on)
 
-# 方法 2: Newton-Raphson
+# Method 2: Newton-Raphson
 mf = scf.RHF(mol).newton().run()
 
-# 方法 3: 更换 SCF 方法
-mf = scf.DHF(mol).run()  # Dirac-HF（重原子）
+# Method 3: Change SCF method
+mf = scf.DHF(mol).run()   # Dirac-HF (heavy atoms)
 ```
 
-**Q: 内存不够？**
+**Q: Out of memory?**
 ```python
-# 使用密度拟合减少内存
+# Use density fitting to reduce memory
 mf = scf.RHF(mol).density_fit().run()
 
-# 使用 direct SCF
+# Use direct SCF
 mf.direct_scf = True
 ```
 
-**Q: 如何输出所有轨道能量？**
+**Q: How to print all orbital energies?**
 ```python
 mf = scf.RHF(mol).run()
 print('HOMO:', mf.mo_energy[mf.mo_occ > 0].max())
@@ -558,17 +567,17 @@ print('LUMO:', mf.mo_energy[mf.mo_occ == 0].min())
 
 ---
 
-## Tools 脚本索引
+## Tools Script Index
 
-| 脚本 | 功能 |
-|------|------|
-| `tools/scf.py` | HF/DFT 基础框架 |
-| `tools/tddft.py` | TDDFT/TDA 计算 |
-| `tools/dft.py` | DFT 泛函选择 |
-| `tools/mp2.py` | MP2 计算框架 |
-| `tools/ccsd.py` | CCSD/CCSD(T) 框架 |
-| `tools/cascf.py` | CASSCF/CASPT2 框架 |
-| `tools/geometry.py` | 几何优化 |
-| `tools/spectrum.py` | 光谱生成与可视化 |
-| `tools/pes.py` | 势能面扫描 |
-| `tools/analysis.py` | 波函数分析（Mulliken, NBO, DOS） |
+| Script | Description |
+|--------|-------------|
+| `tools/scf.py` | HF/DFT basic framework |
+| `tools/tddft.py` | TDDFT/TDA calculation |
+| `tools/dft.py` | DFT functional selection & comparison |
+| `tools/mp2.py` | MP2 (RMP2/UMP2) |
+| `tools/ccsd.py` | CCSD/CCSD(T) framework |
+| `tools/cascf.py` | CASSCF/CASPT2/NEVPT2 framework |
+| `tools/geometry.py` | Geometry optimization, TS, frequencies |
+| `tools/spectrum.py` | UV-Vis/CD spectrum generation |
+| `tools/pes.py` | 1D/2D potential energy surface scanning |
+| `tools/analysis.py` | Wavefunction analysis (Mulliken, Löwdin, DOS, NBO) |
