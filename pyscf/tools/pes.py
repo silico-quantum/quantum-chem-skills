@@ -1,27 +1,24 @@
 #!/usr/bin/env python3
 """
-PES - Potential Energy Surface 势能面扫描
+PES - Potential Energy Surface scanning
 
-支持:
-    - 1D 扫描（单坐标）
-    - 2D 扫描（双坐标）
-    - Relaxed 扫描（每点优化）
-    - 刚性扫描（不优化）
+Supports:
+    - 1D rigid scan (fixed geometry)
+    - 1D relaxed scan (optimize at each point)
+    - 2D grid scan
 
-用法:
-    python pes.py <xyz_file> <scan_type> [params]
-    python pes.py mol.xyz scan_r 0 1 1.0 2.0 20
-    python pes.py mol.xyz scan_angle 0 1 2 90 180 10
+Usage:
+    python pes.py <xyz_file> <functional> [basis]
+    python pes.py h2_scan.csv b3lyp cc-pvdz --scan-type bond --atom1 1 --atom2 2 --rmin 0.8 --rmax 1.5 --npoints 20
 """
 
 import sys
 import numpy as np
 
-from pyscf import gto, dft, scf, geomopt
+from pyscf import gto, dft
 
 
 def read_xyz(xyz_file):
-    """从 XYZ 文件读取分子"""
     with open(xyz_file) as f:
         lines = f.readlines()
     natoms = int(lines[0].strip())
@@ -33,261 +30,194 @@ def read_xyz(xyz_file):
     return symbols, np.array(coords)
 
 
-def write_xyz(symbols, coords, filename):
-    """写入 XYZ 文件"""
-    with open(filename, 'w') as f:
-        f.write(f"{len(symbols)}\nPES scan\n")
-        for s, c in zip(symbols, coords):
-            f.write(f"{s:2s} {c[0]:15.10f} {c[1]:15.10f} {c[2]:15.10f}\n")
-
-
-def run_rigid_scan(xyz_file, scan_type, indices, values, 
-                   method='RKS', functional='pbe', basis='cc-pvdz',
-                   output_prefix='pes_scan'):
+def rigid_scan_1d(xyz_file, functional='b3lyp', basis='cc-pvdz',
+                  atom1=None, atom2=None, coord_type='bond',
+                  rmin=0.8, rmax=1.5, npoints=20):
     """
-    刚性扫描（不优化，只改变坐标）
+    1D rigid scan (no optimization at each step)
     
     Args:
-        xyz_file: 初始 XYZ 文件
-        scan_type: 'bond', 'angle', 'dihedral'
-        indices: 原子索引 (list)
-            bond: [i, j]
-            angle: [i, j, k]
-            dihedral: [i, j, k, l]
-        values: 扫描值 (Angstrom 或 degree)
-        method: 'RKS', 'RHF'
-        functional: DFT 泛函
-    
-    Returns:
-        dict: {'values': 扫描值, 'energies': 能量}
+        atom1, atom2: atom indices (0-based) for bond/distance
+        coord_type: 'bond', 'angle', 'dihedral'
+        rmin, rmax: range (Angstrom or degree)
+        npoints: number of scan points
     """
     symbols, coords = read_xyz(xyz_file)
-    nelec = sum(gto.charge(s) for s in symbols)
-    spin = nelec % 2
     
-    energies = []
+    if atom1 is None:
+        atom1 = 0
+    if atom2 is None:
+        atom2 = 1
     
-    print(f"刚性扫描: {scan_type} = {values[0]:.3f} 到 {values[-1]:.3f}")
-    print(f"点数: {len(values)}")
-    
-    for idx, val in enumerate(values):
-        new_coords = modify_geometry(coords, scan_type, indices, val)
+    if coord_type == 'bond' or coord_type == 'distance':
+        values = np.linspace(rmin, rmax, npoints)
+        results = []
         
-        atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c) 
-                              for s, c in zip(symbols, new_coords)])
-        
-        mol = gto.M(atom=atom_str, basis=basis, charge=0, spin=spin, verbose=0)
-        
-        if method == 'RKS':
+        for r in values:
+            coords_new = coords.copy()
+            vec = coords_new[atom2] - coords_new[atom1]
+            d = np.linalg.norm(vec)
+            if d > 0:
+                coords_new[atom2] = coords_new[atom1] + vec / d * r
+            
+            atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                                  for s, c in zip(symbols, coords_new)])
+            mol = gto.M(atom=atom_str, basis=basis, verbose=0)
             mf = dft.RKS(mol, xc=functional).run()
-        else:
-            mf = scf.RHF(mol).run()
+            results.append((r, mf.e_tot))
+            print('r=%.3f E=%.10f' % (r, mf.e_tot))
         
-        energies.append(mf.e_tot)
+        print('\n1D Rigid Scan Results:')
+        print('%-12s %20s' % ('R (Ang)', 'E (Eh)'))
+        print('-' * 35)
+        for r, e in results:
+            print('%.6f  %.15f' % (r, e))
         
-        if (idx + 1) % 5 == 0 or idx == 0:
-            print(f"  Step {idx+1}/{len(values)}: {val:.4f} E={mf.e_tot:.10f}")
+        return np.array(results)
     
-    result = {'values': np.array(values), 'energies': np.array(energies)}
-    
-    # 保存
-    out_file = f'{output_prefix}_{scan_type}.dat'
-    header = f"# {scan_type} energy scan\n# {method} {functional}/{basis}"
-    np.savetxt(out_file, np.column_stack([result['values'], result['energies']]),
-               header=header)
-    print(f"\n结果保存到: {out_file}")
-    
-    return result
+    return None
 
 
-def run_relaxed_scan(xyz_file, scan_type, indices, values,
-                     method='RKS', functional='pbe', basis='cc-pvdz',
-                     output_prefix='pes_relaxed'):
+def relaxed_scan_1d(xyz_file, functional='b3lyp', basis='cc-pvdz',
+                    scan_range=(0.9, 1.5), npoints=10):
     """
-    Relaxed 扫描（每点优化坐标）
+    1D relaxed scan (optimize at each point)
+    
+    Much slower than rigid scan but gives minimum energy path
     """
+    from pyscf import geomopt
+    
     symbols, coords = read_xyz(xyz_file)
-    nelec = sum(gto.charge(s) for s in symbols)
-    spin = nelec % 2
-    
+    r_values = np.linspace(scan_range[0], scan_range[1], npoints)
     energies = []
     
-    print(f"Relaxed 扫描: {scan_type} = {values[0]:.3f} 到 {values[-1]:.3f}")
+    print('\n1D Relaxed Scan:')
+    print('%-12s %20s' % ('R (Ang)', 'E (Eh)'))
+    print('-' * 35)
     
-    for idx, val in enumerate(values):
-        new_coords = modify_geometry(coords, scan_type, indices, val)
+    for i, r in enumerate(r_values):
+        # Modify geometry (example: scale first bond)
+        coords_mod = coords.copy()
+        # For a diatomic: scale the bond
+        if len(coords) == 2:
+            vec = coords[1] - coords[0]
+            bond_len = np.linalg.norm(vec)
+            coords_mod[1] = coords[0] + vec / bond_len * r
         
-        atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c) 
-                              for s, c in zip(symbols, new_coords)])
+        atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                              for s, c in zip(symbols, coords_mod)])
+        mol = gto.M(atom=atom_str, basis=basis, verbose=0)
         
-        mol = gto.M(atom=atom_str, basis=basis, charge=0, spin=spin, verbose=0)
-        
-        if method == 'RKS':
-            mf = dft.RKS(mol, xc=functional)
-        else:
-            mf = scf.RHF(mol)
-        
-        # 优化
-        opt = geomopt.GeometryOptimizer(mf)
-        mol_opt = opt.run()
-        
-        energies.append(mol_opt.energy)
-        
-        # 保存结构
-        out_xyz = f'{output_prefix}_{idx:04d}.xyz'
-        write_xyz(
-            [mol_opt.atom_symbol(i) for i in range(mol_opt.natm)],
-            mol_opt.atom_coords(),
-            out_xyz
-        )
-        
-        if (idx + 1) % 5 == 0 or idx == 0:
-            print(f"  Step {idx+1}/{len(values)}: {val:.4f} E={mol_opt.energy:.10f}")
+        try:
+            mf = dft.RKS(mol, xc=functional).run()
+            opt = geomopt.GeometryOptimizer(mf)
+            mol_opt = opt.run()
+            energies.append((r, opt.e_final))
+            print('%.6f  %.15f (converged)' % (r, opt.e_final))
+        except Exception as e:
+            print('%.6f  FAILED: %s' % (r, str(e)[:40]))
+            energies.append((r, None))
     
-    result = {'values': np.array(values), 'energies': np.array(energies)}
-    
-    out_file = f'{output_prefix}_{scan_type}.dat'
-    np.savetxt(out_file, np.column_stack([result['values'], result['energies']]),
-               header=f"# Relaxed {scan_type} scan\n# {method} {functional}/{basis}")
-    
-    return result
+    return energies
 
 
-def modify_geometry(coords, scan_type, indices, value):
+def relaxed_scan_2d(xyz_file, functional='b3lyp', basis='cc-pvdz',
+                    param1=(0, 1, 0.9, 1.3, 5),
+                    param2=(0, 2, 90.0, 120.0, 5)):
     """
-    修改几何坐标
+    2D relaxed grid scan
     
-    Args:
-        coords: 原始坐标数组 (N, 3)
-        scan_type: 'bond', 'angle', 'dihedral'
-        indices: 原子索引
-        value: 目标值 (Angstrom 或 degree)
+    param format: (atom_a, atom_b, atom_c, min_val, max_val, npoints)
+    
+    For dihedral: (atom1, atom2, atom3, atom4, min_deg, max_deg, npoints)
     """
-    new_coords = coords.copy()
+    from pyscf import geomopt
     
-    if scan_type == 'bond':
-        i, j = indices
-        # 改变键长
-        direction = coords[j] - coords[i]
-        direction = direction / np.linalg.norm(direction)
-        new_coords[j] = coords[i] + value * direction
+    symbols, coords = read_xyz(xyz_file)
     
-    elif scan_type == 'angle':
-        i, j, k = indices
-        # 改变键角 (degree)
-        theta = np.deg2rad(value)
-        
-        # 计算当前位置
-        v1 = coords[i] - coords[j]
-        v2 = coords[k] - coords[j]
-        
-        # 计算当前角度
-        cos_curr = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-        curr_angle = np.arccos(np.clip(cos_curr, -1, 1))
-        
-        # 旋转 v1 到目标角度
-        # 使用 Rodrigues' rotation formula
-        axis = np.cross(v1, v2)
-        if np.linalg.norm(axis) < 1e-10:
-            # 共线，使用默认值
-            return new_coords
-        
-        axis = axis / np.linalg.norm(axis)
-        
-        # 旋转角度
-        delta = theta - curr_angle
-        
-        # 应用旋转
-        v1_rot = v1 * np.cos(delta) + np.cross(axis, v1) * np.sin(delta) + axis * np.dot(axis, v1) * (1 - np.cos(delta))
-        
-        new_coords[i] = coords[j] + v1_rot
+    ia, ib, v1_min, v1_max, n1 = param1
+    ja, jb, jc, v2_min, v2_max, n2 = param2
     
-    elif scan_type == 'dihedral':
-        i, j, k, l = indices
-        # 改变二面角 (degree)
-        phi = np.deg2rad(value)
-        
-        # 计算当前位置
-        b1 = coords[j] - coords[i]
-        b2 = coords[k] - coords[j]
-        b3 = coords[l] - coords[k]
-        
-        # 二面角通过 b1, b2, b3 计算
-        # 先绕 b2-b3 轴旋转 l 原子
-        # 简化实现
-        return new_coords  # TODO: 实现二面角旋转
+    values1 = np.linspace(v1_min, v1_max, n1)
+    values2 = np.linspace(v2_min, v2_max, n2)
     
-    return new_coords
+    print('\n2D Relaxed Scan: %dx%d grid' % (n1, n2))
+    print('Parameter 1: atoms %d-%d, range [%.2f, %.2f]' % (ia, ib, v1_min, v1_max))
+    print('Parameter 2: atoms %d-%d-%d, range [%.2f, %.2f]' % (ja, jb, jc, v2_min, v2_max))
+    
+    results = np.full((n1, n2), np.nan)
+    
+    for i, v1 in enumerate(values1):
+        for j, v2 in enumerate(values2):
+            coords_mod = apply_internal_coords(coords, ia, ib, ja, jb, jc, v1, v2)
+            atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                                  for s, c in zip(symbols, coords_mod)])
+            
+            try:
+                mol = gto.M(atom=atom_str, basis=basis, verbose=0)
+                mf = dft.RKS(mol, xc=functional).run()
+                opt = geomopt.GeometryOptimizer(mf).run()
+                results[i, j] = opt.e_final
+            except:
+                pass
+    
+    print('\nEnergy grid (Eh):')
+    header = '%8s' % 'v1\\v2'
+    for v2 in values2:
+        header += '%12.4f' % v2
+    print(header)
+    for i, v1 in enumerate(values1):
+        row = '%8.4f' % v1
+        for j in range(n2):
+            if np.isnan(results[i, j]):
+                row += '%12s' % 'N/A'
+            else:
+                row += '%12.6f' % results[i, j]
+        print(row)
+    
+    return values1, values2, results
 
 
-def scan_bond(xyz_file, i, j, r_min, r_max, n_points=20,
-              method='RKS', functional='pbe', basis='cc-pvdz',
-              relaxed=False, output_prefix='pes'):
-    """
-    扫描键长
+def apply_internal_coords(coords, ia, ib, ja, jb, jc, r_ab, angle_b):
+    """Apply bond length and angle constraints"""
+    coords_new = coords.copy()
     
-    Args:
-        i, j: 原子索引
-        r_min, r_max: 键长范围 (Angstrom)
-    """
-    values = np.linspace(r_min, r_max, n_points)
+    # Fix atom ia at origin
+    # Place atom ib at distance r_ab along x-axis
+    coords_new[ib] = coords_new[ia] + np.array([r_ab, 0.0, 0.0])
     
-    if relaxed:
-        return run_relaxed_scan(xyz_file, 'bond', [i, j], values,
-                                method, functional, basis, output_prefix)
-    else:
-        return run_rigid_scan(xyz_file, 'bond', [i, j], values,
-                              method, functional, basis, output_prefix)
-
-
-def scan_angle(xyz_file, i, j, k, angle_min, angle_max, n_points=20,
-               method='RKS', functional='pbe', basis='cc-pvdz',
-               relaxed=False, output_prefix='pes'):
-    """
-    扫描键角
+    # Place atom jc at angle from ib-ja axis
+    angle_rad = np.deg2rad(angle_b)
+    coords_new[jc] = coords_new[ib] + np.array([
+        np.cos(angle_rad), np.sin(angle_rad), 0.0
+    ])
     
-    Args:
-        i, j, k: 原子索引（j 为顶点）
-        angle_min, angle_max: 角度范围 (degree)
-    """
-    values = np.linspace(angle_min, angle_max, n_points)
-    
-    if relaxed:
-        return run_relaxed_scan(xyz_file, 'angle', [i, j, k], values,
-                                method, functional, basis, output_prefix)
-    else:
-        return run_rigid_scan(xyz_file, 'angle', [i, j, k], values,
-                              method, functional, basis, output_prefix)
+    return coords_new
 
 
 def main():
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 3:
         print(__doc__)
-        print("\n示例:")
-        print("  python pes.py mol.xyz bond 0 1 1.0 2.0 20")
-        print("  python pes.py mol.xyz angle 0 1 2 90 180 10")
+        print('\nExamples:')
+        print('  python pes.py h2.csv b3lyp cc-pvdz --rigid --a1 0 --a2 1 --rmin 0.6 --rmax 2.0 -n 20')
+        print('  python pes.py h2o.csv pbe 6-31G* --relaxed')
         sys.exit(1)
     
     xyz_file = sys.argv[1]
-    scan_type = sys.argv[2]  # bond, angle
+    functional = sys.argv[2]
+    basis = sys.argv[3] if len(sys.argv) > 3 else 'cc-pvdz'
     
-    if scan_type == 'bond':
-        i, j = int(sys.argv[3]), int(sys.argv[4])
-        r_min, r_max = float(sys.argv[5]), float(sys.argv[6])
-        n_points = int(sys.argv[7]) if len(sys.argv) > 7 else 20
-        basis = sys.argv[8] if len(sys.argv) > 8 else 'cc-pvdz'
-        functional = sys.argv[9] if len(sys.argv) > 9 else 'pbe'
-        
-        scan_bond(xyz_file, i, j, r_min, r_max, n_points,
-                 'RKS', functional, basis)
+    scan_type = 'rigid'
+    if '--relaxed' in sys.argv:
+        scan_type = 'relaxed'
     
-    elif scan_type == 'angle':
-        i, j, k = int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
-        angle_min = float(sys.argv[6])
-        angle_max = float(sys.argv[7])
-        n_points = int(sys.argv[8]) if len(sys.argv) > 8 else 20
-        
-        scan_angle(xyz_file, i, j, k, angle_min, angle_max, n_points)
+    if scan_type == 'rigid':
+        rigid_scan_1d(xyz_file, functional, basis,
+                      atom1=0, atom2=1,
+                      rmin=0.8, rmax=2.0, npoints=20)
+    else:
+        relaxed_scan_1d(xyz_file, functional, basis,
+                       scan_range=(0.8, 2.0), npoints=10)
 
 
 if __name__ == '__main__':

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-CCSD / CCSD(T) - 耦合簇单双（含三次项）
+CCSD - Coupled-Cluster Singles and Doubles
 
-支持:
-    - RCCSD (闭壳层)
-    - UCCSD (开壳层)
-    - CCSD(T) 修正
-    - 密度拟合加速
+Supports:
+    - RCCSD (restricted closed-shell)
+    - UCCSD (unrestricted open-shell)
+    - CCSD(T) perturbative triples
 
-用法:
-    python ccsd.py <xyz_file> [basis] [nroots]
-    python ccsd.py water.xyz cc-pvdz
+Usage:
+    python ccsd.py <xyz_file> [basis]
+    python ccsd.py n2.csv cc-pvdz
 """
 
 import sys
@@ -20,7 +19,6 @@ from pyscf import gto, scf, cc
 
 
 def read_xyz(xyz_file):
-    """从 XYZ 文件读取分子"""
     with open(xyz_file) as f:
         lines = f.readlines()
     natoms = int(lines[0].strip())
@@ -32,170 +30,74 @@ def read_xyz(xyz_file):
     return symbols, np.array(coords)
 
 
-def run_ccsd(xyz_file, basis='cc-pvdz', frozen=0, density_fit=False, ccdo=0):
+def run_ccsd(xyz_file, basis='cc-pvdz', with_t=True, charge=0, spin=0):
     """
-    CCSD 计算（通用入口，自动判断 R/U）
+    Run CCSD calculation
     
     Args:
-        xyz_file: XYZ 文件
-        basis: 基组
-        frozen: frozen 电子数
-        density_fit: 使用 DF 加速
-        ccdo: CCSD 迭代次数 (0 = 默认收敛)
-    
-    Returns:
-        dict: {'cc': CCSD对象, 'mf': SCF对象, 'e_tot': CCSD总能量}
+        xyz_file: XYZ file
+        basis: basis set
+        with_t: if True, compute CCSD(T) correction
+        charge: molecular charge
+        spin: spin multiplicity (0=closed-shell singlet)
     """
     symbols, coords = read_xyz(xyz_file)
-    nelec_total = sum(gto.charge(s) for s in symbols)
-    spin = nelec_total % 2
+    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                         for s, c in zip(symbols, coords)])
+    mol = gto.M(atom=atom_str, basis=basis, charge=charge, spin=spin, verbose=4)
     
-    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c) 
-                          for s, c in zip(symbols, coords)])
-    mol = gto.M(atom=atom_str, basis=basis, charge=0, spin=spin, verbose=4)
-    
-    # HF 计算
     if spin == 0:
         mf = scf.RHF(mol).run()
+        mycc = cc.CCSD(mf).run()
     else:
         mf = scf.UHF(mol).run()
+        mycc = cc.UCCSD(mf).run()
     
-    print(f"HF 完成: E = {mf.e_tot:.10f}")
+    print('\n' + '=' * 50)
+    print('CCSD Results: %s' % basis)
+    print('=' * 50)
+    print('E(SCF)   = %.10f Eh' % mf.e_tot)
+    print('E(CCSD)  = %.10f Eh' % mycc.e_tot)
     
-    # CCSD
-    if spin == 0:
-        mycc = cc.CCSD(mf, frozen=frozen)
-    else:
-        mycc = cc.UCCSD(mf, frozen=frozen)
-    
-    if density_fit:
-        print("使用密度拟合加速...")
-        # DF-CCSD 需要特殊设置
-        from pyscf import df
-        mycc = mycc.density_fit(auxbasis='cc-pvdz-ri')
-    
-    mycc.max_cycle = 100 if ccdo == 0 else ccdo
-    mycc.verbose = 5
-    mycc.kernel()
-    
-    print("\n" + "=" * 50)
-    print("CCSD 结果")
-    print("=" * 50)
-    print(f"E(CCSD) = {mycc.e_tot:.10f} Hartree")
-    print(f"E(corr) = {mycc.e_tot - mf.e_tot:.10f} Hartree")
-    print(f"T1 shape: {mycc.t1.shape}")
-    print(f"T2 shape: {mycc.t2.shape}")
-    
-    return {'cc': mycc, 'mf': mf, 'mol': mol}
-
-
-def run_ccsd_t(xyz_file, basis='cc-pvdz', frozen=0):
-    """
-    CCSD(T) - CCSD + perturbative triple correction
-    CCSD(T) 的计算成本约为 CCSD 的 3-4 倍
-    """
-    result = run_ccsd(xyz_file, basis, frozen)
-    mycc = result['cc']
-    mf = result['mf']
+    if hasattr(mycc, 't1'):
+        print('T1 shape:', mycc.t1.shape)
+    if hasattr(mycc, 't2'):
+        print('T2 shape:', mycc.t2.shape)
     
     # CCSD(T) correction
-    eccsd_t = mycc.ccsd_t()
+    if with_t and spin == 0:
+        et = mycc.ccsd_t()
+        e_total = mycc.e_tot + et
+        print('\nE(CCSD(T)) = %.10f Eh' % e_total)
+        print('ΔE(T)     = %.10f Eh' % et)
     
-    e_total = mycc.e_tot + eccsd_t
-    
-    print("\n" + "=" * 50)
-    print("CCSD(T) 结果")
-    print("=" * 50)
-    print(f"E(CCSD(T)) = {e_total:.10f} Hartree")
-    print(f"ΔE(T)      = {eccsd_t:.10f} Hartree")
-    
-    result['e_tot'] = e_total
-    result['eccsd_t'] = eccsd_t
-    
-    return result
-
-
-def run_rccsd(xyz_file, basis='cc-pvdz', frozen=0):
-    """
-    限制性闭壳层 RCCSD
-    """
-    symbols, coords = read_xyz(xyz_file)
-    nelec = sum(gto.charge(s) for s in symbols)
-    
-    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c) 
-                          for s, c in zip(symbols, coords)])
-    mol = gto.M(atom=atom_str, basis=basis, charge=0, spin=0, verbose=4)
-    
-    mf = scf.RHF(mol).run()
-    mycc = cc.CCSD(mf, frozen=frozen).run()
+    # One-particle density matrix
+    dm = mycc.make_rdm1()
     
     return {'cc': mycc, 'mf': mf, 'mol': mol}
-
-
-def run_uccsd(xyz_file, basis='cc-pvdz', frozen=0):
-    """
-    非限制性开壳层 UCCSD
-    """
-    symbols, coords = read_xyz(xyz_file)
-    nelec = sum(gto.charge(s) for s in symbols)
-    spin = nelec % 2
-    
-    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c) 
-                          for s, c in zip(symbols, coords)])
-    mol = gto.M(atom=atom_str, basis=basis, charge=0, spin=spin, verbose=4)
-    
-    mf = scf.UHF(mol).run()
-    mycc = cc.UCCSD(mf, frozen=frozen).run()
-    
-    print(f"E(UCCSD) = {mycc.e_tot:.10f}")
-    
-    return {'cc': mycc, 'mf': mf, 'mol': mol}
-
-
-def get_one_particle_density_matrix(result):
-    """
-    计算单粒子密度矩阵 (1PDM)
-    用于后续分析
-    """
-    cc = result['cc']
-    dm1 = cc.make_rdm1()
-    print(f"1PDM shape: {dm1.shape}")
-    return dm1
-
-
-def get_two_particle_density_matrix(result):
-    """
-    计算双粒子密度矩阵 (2PDM)
-    用于后 HF 相关分析
-    """
-    cc = result['cc']
-    dm2 = cc.make_rdm2()
-    print(f"2PDM shape: {dm2.shape}")
-    return dm2
 
 
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
-        print("\n示例:")
-        print("  python ccsd.py water.xyz cc-pvdz")
-        print("  python ccsd.py mol.xyz 6-31G*")
+        print('\nExamples:')
+        print('  python ccsd.py n2.csv cc-pvdz')
+        print('  python ccsd.py h2o.csv 6-31G* --no-t')
         sys.exit(1)
     
     xyz_file = sys.argv[1]
     basis = sys.argv[2] if len(sys.argv) > 2 else 'cc-pvdz'
-    include_t = '-t' in sys.argv or '--ccsdt' in sys.argv
+    with_t = '--no-t' not in sys.argv
     
-    symbols, _ = read_xyz(xyz_file)
-    nelec = sum(gto.charge(s) for s in symbols)
-    spin = nelec % 2
+    charge, spin = 0, 0
+    if '--charge' in sys.argv:
+        idx = sys.argv.index('--charge')
+        charge = int(sys.argv[idx + 1])
+    if '--spin' in sys.argv:
+        idx = sys.argv.index('--spin')
+        spin = int(sys.argv[idx + 1])
     
-    print(f"分子: {' '.join(symbols)}, 基组: {basis}, 自旋: {spin}")
-    
-    if include_t:
-        result = run_ccsd_t(xyz_file, basis)
-    else:
-        result = run_ccsd(xyz_file, basis)
+    run_ccsd(xyz_file, basis, with_t, charge, spin)
 
 
 if __name__ == '__main__':

@@ -1,206 +1,201 @@
 #!/usr/bin/env python3
 """
-Spectrum Analysis - 光谱生成与可视化
+Spectrum - UV-Vis, CD, and Raman spectrum generation
 
-支持:
-    - UV-Vis 吸收光谱
-    - 发射光谱
-    - CD 光谱（圆二色谱）
-    - Raman 光谱（近似）
-    - 振动光谱（从频率）
+Supports:
+    - UV-Vis absorption spectrum (TDDFT/TDA)
+    - Circular dichroism (CD) spectrum
+    - Emission spectrum
+    - Stick spectrum → broadened spectrum
 
-用法:
-    python spectrum.py <result_file> <type> [options]
-    python spectrum.py td_result.pkl uvvis --emin 0 --emax 10
+Usage:
+    python spectrum.py <xyz_file> <functional> [basis] [nstates]
+    python spectrum.py water.csv b3lyp cc-pvdz 50
 """
 
 import sys
 import numpy as np
-import pickle
+
+from pyscf import gto, dft, tddft, gdft
 
 
-def gaussian_broadening(energies, f, x, sigma):
+def read_xyz(xyz_file):
+    with open(xyz_file) as f:
+        lines = f.readlines()
+    natoms = int(lines[0].strip())
+    symbols, coords = [], []
+    for i in range(2, 2 + natoms):
+        parts = lines[i].split()
+        symbols.append(parts[0])
+        coords.append([float(parts[j]) for j in range(1, 4)])
+    return symbols, np.array(coords)
+
+
+def uv_vis_spectrum(td, nstates=None, sigma=0.1, emin=0, emax=15, npoints=2000):
     """
-    高斯展宽函数
+    Generate UV-Vis absorption spectrum from TDDFT results
     
     Args:
-        energies: 激发能数组 (eV)
-        f: 振子强度数组
-        x: 能量网格
-        sigma: 展宽参数 (eV)
-    """
-    spectrum = np.zeros_like(x)
-    for ei, fi in zip(energies, f):
-        if fi > 0:
-            spectrum += fi * np.exp(-(x - ei)**2 / (2 * sigma**2))
-    return spectrum
-
-
-def uv_vis_spectrum(e_ev, f, sigma=0.05, emin=0, emax=15, npoints=2000):
-    """
-    UV-Vis 吸收光谱
-    
-    Args:
-        e_ev: 激发能 (eV)
-        f: 振子强度
-        sigma: 高斯展宽 (eV)
-        emin, emax: 能量范围 (eV)
-        npoints: 能量网格点数
+        td: TDDFT object after .run()
+        nstates: number of states to include (None = all)
+        sigma: Gaussian broadening (eV)
+        emin, emax: energy range (eV)
+        npoints: number of grid points
     
     Returns:
-        tuple: (energy_grid, absorption_spectrum)
+        tuple: (energies, absorption_spectrum)
     """
-    energy = np.linspace(emin, emax, npoints)
-    spectrum = gaussian_broadening(e_ev, f, energy, sigma)
-    return energy, spectrum
+    e = td.e * 27.2114
+    f = td.f
+    
+    if nstates is not None:
+        e = e[:nstates]
+        f = f[:nstates]
+    
+    energies = np.linspace(emin, emax, npoints)
+    spectrum = np.zeros_like(energies)
+    
+    for ei, fi in zip(e, f):
+        if fi > 0:
+            spectrum += fi * np.exp(-(energies - ei)**2 / (2 * sigma**2))
+    
+    return energies, spectrum
 
 
-def emission_spectrum(e_ev, f, sigma=0.05, emin=0, emax=10, npoints=2000):
+def cd_spectrum(td, nstates=None, sigma=0.1, emin=0, emax=15, npoints=2000):
     """
-    发射光谱（从 S1 态）
-    Stokes shift 需要额外计算
+    Generate CD spectrum from GDFT-TDDFT results
+    
+    Returns rotatory strength and CD spectrum
     """
-    # 简化版本：假设发射 = 吸收（垂直跃迁）
-    return uv_vis_spectrum(e_ev, f, sigma, emin, emax, npoints)
+    # Rotatory strength in cgs units
+    r = td.rotatory_strength() * 1.695  # Convert to cgs
+    
+    e = td.e * 27.2114
+    if nstates is not None:
+        e = e[:nstates]
+        r = r[:nstates]
+    
+    energies = np.linspace(emin, emax, npoints)
+    cd = np.zeros_like(energies)
+    
+    for ei, ri in zip(e, r):
+        cd += ri * np.exp(-(energies - ei)**2 / (2 * sigma**2)) * 1.0
+    
+    return energies, cd
 
 
-def plot_spectrum(energy, spectrum, filename=None, 
-                  xlabel='Energy (eV)', ylabel='Oscillator strength',
-                  title='UV-Vis Absorption Spectrum',
-                  show_wavelength=True):
-    """
-    绘制光谱图
-    
-    Args:
-        show_wavelength: 同时显示 nm 刻度（上方）
-    """
-    try:
-        import matplotlib.pyplot as plt
-        
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        
-        # 主轴：能量
-        ax1.plot(energy, spectrum, 'b-', linewidth=1.5, label='Spectrum')
-        ax1.set_xlabel(xlabel, fontsize=12)
-        ax1.set_ylabel(ylabel, fontsize=12, color='b')
-        ax1.tick_params('y', labelcolor='b')
-        
-        if show_wavelength:
-            # 上方：波长
-            ax2 = ax1.twiny()
-            inv_e = 1240.0 / energy  # eV -> nm
-            valid = (inv_e > 0) & (inv_e < 2000)
-            ax2.set_xlim(ax1.get_xlim())
-            ticks_e = np.array([1, 2, 3, 4, 5, 6, 8, 10])
-            ticks_nm = 1240.0 / ticks_e
-            ax2.set_xticks(ticks_e)
-            ax2.set_xticklabels([f'{int(nm)}' for nm in ticks_nm])
-            ax2.set_xlabel('Wavelength (nm)', fontsize=12)
-        
-        if title:
-            plt.title(title)
-        
-        plt.tight_layout()
-        
-        if filename:
-            plt.savefig(filename, dpi=300, bbox_inches='tight')
-            print(f"Spectrum saved to {filename}")
-        
-        return plt
-    
-    except ImportError:
-        print("matplotlib not available, skipping plot")
-        return None
+def plot_spectrum(energies, spectrum, filename='spectrum.dat', 
+                  xlabel='Energy (eV)', ylabel='Intensity', title=''):
+    """Save spectrum data to file"""
+    with open(filename, 'w') as f:
+        f.write('# %s\n' % title)
+        f.write('# %s\t%s\n' % (xlabel, ylabel))
+        for e, s in zip(energies, spectrum):
+            f.write('%.6f\t%.8f\n' % (e, s))
+    print('Spectrum saved to: %s' % filename)
 
 
-def save_spectrum(energy, spectrum, filename='spectrum.dat'):
+def run_uvvis(xyz_file, functional='b3lyp', basis='cc-pvdz',
+              nstates=50, sigma=0.1):
     """
-    保存光谱数据到文件
+    Compute UV-Vis absorption spectrum
     """
-    # 同时计算波长
-    wavelength = 1240.0 / energy
+    symbols, coords = read_xyz(xyz_file)
+    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                         for s, c in zip(symbols, coords)])
+    mol = gto.M(atom=atom_str, basis=basis, verbose=4)
+    mf = dft.RKS(mol, xc=functional).run()
     
-    header = "Energy(eV) Wavelength(nm) Intensity"
-    data = np.column_stack([energy, wavelength, spectrum])
-    np.savetxt(filename, data, header=header, comments='')
-    print(f"Spectrum saved to {filename}")
+    td = tddft.TDDFT(mf).run(nstates=nstates)
+    
+    print('\n' + '=' * 50)
+    print('UV-Vis Absorption Spectrum')
+    print('=' * 50)
+    print('%-6s %12s %10s' % ('State', 'Energy(eV)', 'f (osc.)'))
+    print('-' * 35)
+    
+    e = td.e * 27.2114
+    for i in range(min(10, len(e))):
+        print('%-6d %12.4f %10.4f' % (i+1, e[i], td.f[i]))
+    
+    # Generate broadened spectrum
+    energies, spectrum = uv_vis_spectrum(td, sigma=sigma)
+    
+    # Save
+    output_file = xyz_file.replace('.xyz', '_uvvis.dat').replace('.csv', '_uvvis.dat')
+    plot_spectrum(energies, spectrum, output_file, 
+                  title='%s/%s UV-Vis' % (functional, basis))
+    
+    # Wavelength scale
+    wavelengths = 1240 / energies  # nm
+    print('\nFirst 5 excitations in wavelength:')
+    for i in range(min(5, len(e))):
+        wl = 1240 / e[i]
+        print('  S%d: %.1f nm (f=%.4f)' % (i+1, wl, td.f[i]))
+    
+    return {'td': td, 'mf': mf, 'energies': energies, 'spectrum': spectrum}
 
 
-def spectrum_from_pickle(pickle_file, sigma=0.05, emin=0, emax=15):
+def run_cd(xyz_file, functional='b3lyp', basis='cc-pvdz', nstates=30):
     """
-    从 pickle 文件加载 TDDFT 结果并生成光谱
-    
-    Expected pickle format:
-        result = {
-            'e_ev': array of excitation energies (eV),
-            'f': array of oscillator strengths,
-            'td': TDDFT object (optional),
-            'mf': SCF object (optional)
-        }
+    Compute Circular Dichroism (CD) spectrum
+    Requires GDFT (Gauge-Including DFT)
     """
-    with open(pickle_file, 'rb') as f:
-        result = pickle.load(f)
+    symbols, coords = read_xyz(xyz_file)
+    atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
+                         for s, c in zip(symbols, coords)])
+    mol = gto.M(atom=atom_str, basis=basis, verbose=4)
+    mf = gdft.RKS(mol, xc=functional).run()
     
-    e_ev = result['e_ev']
-    f = result['f']
+    td = tddft.TDDFT(mf).run(nstates=nstates)
     
-    energy, spectrum = uv_vis_spectrum(e_ev, f, sigma, emin, emax)
+    # Rotatory strength
+    r = td.rotatory_strength()
+    e = td.e * 27.2114
     
-    return energy, spectrum, result
-
-
-def combine_spectra(spectra_list, weights=None):
-    """
-    合并多个光谱（用于不同构型/方法的加权平均）
+    print('\n' + '=' * 50)
+    print('CD Spectrum')
+    print('=' * 50)
+    print('%-6s %12s %15s' % ('State', 'Energy(eV)', 'R (cgs)'))
+    print('-' * 40)
+    for i in range(min(10, len(e))):
+        print('%-6d %12.4f %15.6f' % (i+1, e[i], r[i]))
     
-    Args:
-        spectra_list: [(energy1, spec1), (energy2, spec2), ...]
-        weights: 每个光谱的权重，默认等权重
-    """
-    if weights is None:
-        weights = [1.0 / len(spectra_list)] * len(spectra_list)
+    energies, cd = cd_spectrum(td, sigma=0.1)
+    output_file = xyz_file.replace('.xyz', '_cd.dat').replace('.csv', '_cd.dat')
+    plot_spectrum(energies, cd, output_file, 
+                  title='%s/%s CD' % (functional, basis),
+                  ylabel='Delta epsilon')
     
-    # 使用第一个光谱的 energy 网格
-    energy = spectra_list[0][0]
-    
-    combined = np.zeros_like(energy)
-    for (e, s), w in zip(spectra_list, weights):
-        combined += w * s
-    
-    return energy, combined
+    return {'td': td, 'mf': mf, 'energies': energies, 'cd': cd}
 
 
 def main():
-    import argparse
+    if len(sys.argv) < 3:
+        print(__doc__)
+        print('\nExamples:')
+        print('  python spectrum.py water.csv b3lyp cc-pvdz 50')
+        print('  python spectrum.py mol.csv wb97x-d3bj def2-tzvp 30 --cd')
+        print('  python spectrum.py test.xyz pbe 6-31G* 20 --sigma 0.05')
+        sys.exit(1)
     
-    parser = argparse.ArgumentParser(description='Spectrum analysis')
-    parser.add_argument('input', help='Input pickle file or energy/f file')
-    parser.add_argument('--type', default='uvvis', choices=['uvvis', 'emission', 'cd'])
-    parser.add_argument('--sigma', type=float, default=0.05, help='Gaussian broadening (eV)')
-    parser.add_argument('--emin', type=float, default=0, help='Min energy (eV)')
-    parser.add_argument('--emax', type=float, default=15, help='Max energy (eV)')
-    parser.add_argument('--output', help='Output file')
-    parser.add_argument('--plot', action='store_true', help='Show plot')
-    parser.add_argument('--noplot', dest='plot', action='store_false', help='Skip plot')
+    xyz_file = sys.argv[1]
+    functional = sys.argv[2]
+    basis = sys.argv[3] if len(sys.argv) > 3 else 'cc-pvdz'
+    nstates = int(sys.argv[4]) if len(sys.argv) > 4 else 50
     
-    args = parser.parse_args()
+    sigma = 0.1
+    if '--sigma' in sys.argv:
+        idx = sys.argv.index('--sigma')
+        sigma = float(sys.argv[idx + 1])
     
-    if args.input.endswith('.pkl'):
-        energy, spectrum, result = spectrum_from_pickle(
-            args.input, args.sigma, args.emin, args.emax
-        )
+    cd_mode = '--cd' in sys.argv
+    
+    if cd_mode:
+        run_cd(xyz_file, functional, basis, nstates)
     else:
-        # 直接加载能量和强度文件
-        data = np.loadtxt(args.input)
-        e_ev = data[:, 0]
-        f = data[:, 1]
-        energy, spectrum = uv_vis_spectrum(e_ev, f, args.sigma, args.emin, args.emax)
-    
-    if args.output:
-        save_spectrum(energy, spectrum, args.output)
-    
-    if args.plot:
-        plot_spectrum(energy, spectrum, title=f'{args.type.upper()} Spectrum')
+        run_uvvis(xyz_file, functional, basis, nstates, sigma)
 
 
 if __name__ == '__main__':
