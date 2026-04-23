@@ -7,6 +7,14 @@
 
 This repository implements a fully automated pipeline for discovering deep-blue TADF emitters by evaluating $S_1$, $T_1$ energy levels and singlet-triplet gaps ($\Delta E_{ST}$).
 
+## 🤖 OpenClaw-Powered Agentic Workflow
+
+<p align="center">
+  <img src="../assets/openclaw-agentic-workflow.jpg" width="900" alt="Traditional TADF screening vs OpenClaw-powered agentic workflow">
+  <br>
+  <i>Comparison of traditional manual TADF screening and the OpenClaw-powered agentic workflow used in this project.</i>
+</p>
+
 ---
 
 ## 🚀 Screening Workflow
