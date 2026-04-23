@@ -1,118 +1,200 @@
 # 🔮 Quantum Chemistry Skills
 
-> **Foundational primitives for computational chemistry automation: reproducible workflows, sampling, and analysis helper scripts.**
+> Core skills and workflow building blocks for computational chemistry, molecular screening, visualization, and agent-assisted research.
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Organization](https://img.shields.io/badge/Organization-Silico--Quantum-purple.svg)](https://github.com/silico-quantum)
 [![PySCF](https://img.shields.io/badge/Compute-PySCF-red.svg)](https://pyscf.org/)
 [![xTB](https://img.shields.io/badge/Semiempirical-xTB-orange.svg)](https://xtb-docs.readthedocs.io/)
 
-A collection of open-source tools and AI agent skills for quantum chemistry workflows. Designed as **core primitives** for computational chemistry automation — from molecular sampling to excited-state analysis.
+This repository is the **core toolbox layer** of the Silico Quantum ecosystem.
+It collects reusable skills for:
 
-[Quick Start](#-quick-start) • [Core Skills](#-core-skills) • [Visual Gallery](#-visual-gallery) • [Ecosystem](#-silico-quantum-ecosystem)
+- **electronic-structure calculations** (PySCF)
+- **semiempirical screening and MD** (xTB)
+- **wavefunction analysis** (Multiwfn)
+- **photophysics workflows** (MOMAP)
+- **molecular sampling and structure generation**
+- **agent-driven automation with OpenClaw**
 
----
-
-## 🌐 Silico Quantum Ecosystem
-
-This repository is part of the **[silico-quantum](https://github.com/silico-quantum)** organization — open-source tools for computational chemistry, developed and maintained by **Silico (硅灵)** 🔮, an AI research partner.
-
-| Repository | Description |
-|------------|-------------|
-| **[quantum-chem-skills](https://github.com/silico-quantum/quantum-chem-skills)** | Core primitives: PySCF, Multiwfn, xyzrender, MOMAP, RDKit, sampling |
-| **[tadf-screening](https://github.com/silico-quantum/tadf-screening)** | High-throughput TADF emitter screening pipeline built on core skills |
-| **[workspace](https://github.com/silico-quantum/workspace)** | Private research workspace and experimental prototypes |
-
-**Architecture:** Primitives are composed into domain-specific pipelines:
-`SMILES → Sampling → PySCF (DFT/TDDFT) → Multiwfn (Analysis) → MOMAP (Photophysics)`
+If you only want the end-to-end TADF pipeline, start here:
+**[`tadf-screening/`](tadf-screening/README.md)**
 
 ---
 
-## 🧬 Core Skills
+## 🌐 Where This Repo Fits
 
-### 1. ⚛️ Structure & Sampling
-*   **[Molecular Sampler](molecular-sampler/)**: Extract and sample molecular structures from cluster/ONIOM files. Union-Find molecule identification + distance-sorted neighbor sampling.
-*   **[RDKit Chemistry](rdkit-chemistry/)**: 3D conformer generation (ETKDG), molecular descriptors (LogP, TPSA), and Gasteiger charge analysis.
-*   **[xTB Cluster MD](xtb-cluster-md/)**: Semi-empirical MD (GFN-FF/GFN2-xTB) for organic molecular clusters with automated trajectory animation.
+The ecosystem is organized in layers:
 
-### 2. 🧪 Electronic Structure Computing
-*   **[PySCF](pyscf/)**: Python-based quantum chemistry. Supports Ground state (HF, KS-DFT), Excited states (LR-TDDFT, TDA), and Post-HF methods.
-*   **[MOMAP](momap/)**: helper for molecular photophysics and charge transport. Predict radiative/non-radiative (IC/ISC) rate constants and quantum yields.
+1. **This repo (`quantum-chem-skills`)**
+   - reusable primitives and domain skills
+   - examples, scripts, and tested calculation fragments
+2. **`tadf-screening/`**
+   - an application pipeline built on top of these primitives
+   - candidate generation → xTB/sTDA filtering → Gaussian/PySCF validation
+3. **OpenClaw / agent workflows**
+   - orchestration, monitoring, reporting, and long-running automation
 
-### 3. 📊 Analysis & Visualization
-*   **[Multiwfn](multiwfn/)**: Advanced wave function analysis. Population analysis (Hirshfeld, ADCH, CM5), bond orders, and spectroscopy (UV-Vis, IR, Raman).
-*   **[xyzrender](xyzrender/)**: Command-line driven, publication-quality molecular graphics. Supports transparent backgrounds, bond orders, and orbital rendering.
-*   **[Orbital Analysis](molecular-orbital-analysis-skill/)**: Streamlined workflow for MO composition, energy level diagrams, and isosurface generation.
+In short:
+
+`SMILES / structures → screening primitives → quantum calculations → analysis → pipeline decisions`
 
 ---
 
-## 🖼️ Visual Gallery
+## 🤖 OpenClaw-Powered Agentic Workflow
 
-All figures generated from **actual calculations** on benzene (C₆H₆).
+<p align="center">
+  <img src="assets/openclaw-agentic-workflow.jpg" width="900" alt="Traditional TADF screening vs OpenClaw-powered agentic workflow">
+  <br>
+  <i>Traditional manual screening versus the OpenClaw-powered agentic workflow used in this project family.</i>
+</p>
 
-### Molecular Structure & Frontier Orbitals
+---
 
-<img src="examples/figures/01_benzene_structure.png" width="220" align="right">
+## 🧬 Core Modules
 
-**Benzene (C₆H₆)** — D₆h symmetry, rendered with `xyzrender` using bond orders. Calculations verified at B3LYP/cc-pVDZ level.
+### Electronic structure
+- **[`pyscf/`](pyscf/)** — DFT, TDDFT, orbital analysis, reference examples
+- **[`gaussian/`](gaussian/)** — Gaussian-oriented helpers and workflow notes
+- **[`momap/`](momap/)** — photophysics and charge-transport related workflows
 
-<br clear="right">
+### Molecular structure and screening
+- **[`rdkit-chemistry/`](rdkit-chemistry/)** — conformers, descriptors, charge features
+- **[`molecular-sampler/`](molecular-sampler/)** — extract and sample molecular assemblies
+- **[`xtb-cluster-md/`](xtb-cluster-md/)** — xTB / GFN-FF cluster MD workflows
+- **[`tadf-screening/`](tadf-screening/)** — high-throughput TADF emitter screening pipeline
 
-**Frontier Molecular Orbitals** — HOMO-1, HOMO, LUMO (PySCF B3LYP/cc-pVDZ, rendered with `xyzrender --mo --flat-mo --iso 0.04`):
+### Analysis and visualization
+- **[`multiwfn/`](multiwfn/)** — population analysis, bond orders, spectra-related analysis
+- **[`xyzrender/`](xyzrender/)** — publication-style molecular rendering and orbital plots
+- **[`molecular-orbital-analysis-skill/`](molecular-orbital-analysis-skill/)** — MO-focused analysis helpers
 
-<img src="examples/figures/02_orbitals.png" width="100%">
+---
 
-### Absorption & Emission Spectra
+## 📁 Recommended Reading Order
 
-**UV-Vis Absorption Spectrum** (LR-TDDFT, 20 states, Gaussian broadening σ = 0.15 eV):
+If you're new here, read in this order:
 
-<img src="examples/figures/03_uvvis.png" width="100%">
-
-**Absorption & Emission with Stokes Shift** — Spectral overlap integral:
-
-<img src="examples/figures/04_abs_em.png" width="100%">
-
-### Potential Energy Surface & MD
-
-**2D PES Scan** along C–C and C–H bond stretches (B3LYP/STO-3G + TDA, 25×25 grid):
-
-<img src="examples/figures/05_pes.png" width="100%">
-
-**Benzene Cluster MD** (8 molecules, GFN-FF, 300K, 5 ps) — aggregation behavior analysis:
-
-<img src="examples/figures/06_md.png" width="100%">
+1. **This README** — repo overview
+2. **[`INSTALL.md`](INSTALL.md)** — environment setup
+3. **[`USAGE.md`](USAGE.md)** — quick examples
+4. **Module README / references** inside the folder you care about
+5. **[`tadf-screening/README.md`](tadf-screening/README.md)** if your goal is OLED / TADF screening
 
 ---
 
 ## 🚀 Quick Start
 
+### 1. Clone the repository
+
 ```bash
-# Clone the repository
 git clone https://github.com/silico-quantum/quantum-chem-skills.git
 cd quantum-chem-skills
-
-# Installation via Conda
-conda env create -f environment.yml
-conda activate qc
 ```
 
-### Install as OpenClaw Skills
+### 2. Set up a basic environment
+
+See full instructions in [`INSTALL.md`](INSTALL.md).
+
+Minimal example:
+
+```bash
+conda create -n qc -y python=3.11
+conda activate qc
+
+pip install pyscf numpy scipy xyzrender
+conda install -c conda-forge xtb
+```
+
+### 3. Install selected skills into OpenClaw
+
 ```bash
 cp -r pyscf multiwfn momap molecular-sampler xyzrender xtb-cluster-md ~/.openclaw/skills/
 ```
 
-## ⚙️ Software Requirements
+### 4. Run a verified example
 
-| Skill | Software | Install |
-|-------|----------|---------|
-| PySCF | PySCF ≥ 2.5 | `pip install pyscf` |
-| Multiwfn | Multiwfn ≥ 3.8 | [Download](http://sobereva.com/multiwfn/) |
-| MOMAP | MOMAP 2024A | `module load momap` |
-| xyzrender | Python ≥ 3.10 | `pip install xyzrender` |
-| xTB | xTB ≥ 6.5 | `conda install xtb` |
+```bash
+python3 pyscf/references/benzene-dft-tddft.py
+```
+
+More examples: [`USAGE.md`](USAGE.md) and [`examples/`](examples/README.md)
+
+---
+
+## 🔬 What You Can Do With This Repo
+
+### Example A — run a small PySCF calculation
+```bash
+python3 pyscf/references/benzene-dft-tddft.py
+```
+
+### Example B — render a molecule
+```bash
+xyzrender molecule.xyz -o output.png -t --bo
+```
+
+### Example C — run xTB cluster MD
+```bash
+python3 xtb-cluster-md/scripts/build_cluster.py --sdf molecule.sdf -n 24 -o cluster.xyz
+xtb cluster.xyz --gfnff --md -I md.inp
+```
+
+### Example D — use the TADF pipeline
+Go to [`tadf-screening/`](tadf-screening/README.md) for the full screening workflow.
+
+---
+
+## 🖼️ Example Outputs
+
+All figures below are generated from real calculations in this repo.
+
+### Frontier orbitals
+<img src="examples/figures/02_orbitals.png" width="100%" alt="Frontier orbitals">
+
+### UV-Vis absorption
+<img src="examples/figures/03_uvvis.png" width="100%" alt="UV-Vis spectrum">
+
+### Absorption / emission overlap
+<img src="examples/figures/04_abs_em.png" width="100%" alt="Absorption and emission spectra">
+
+### Potential energy surface
+<img src="examples/figures/05_pes.png" width="100%" alt="Potential energy surface">
+
+---
+
+## 🧭 Project Structure
+
+```text
+quantum-chem-skills/
+├── pyscf/                         PySCF workflows and references
+├── multiwfn/                      Wavefunction analysis helpers
+├── momap/                         Photophysics workflow helpers
+├── xyzrender/                     Molecular rendering tools
+├── molecular-sampler/             Cluster / assembly sampling
+├── rdkit-chemistry/               Structure generation and descriptors
+├── xtb-cluster-md/                xTB / GFN-FF molecular dynamics
+├── tadf-screening/                End-to-end TADF screening pipeline
+├── examples/                      Verified visual and numerical demos
+├── INSTALL.md                     Setup instructions
+├── USAGE.md                       Quick usage examples
+└── README.md                      Repo overview
+```
+
+---
+
+## 📦 Related Repositories
+
+| Repository | Role |
+|---|---|
+| [`quantum-chem-skills`](https://github.com/silico-quantum/quantum-chem-skills) | Core skills and primitives |
+| [`tadf-screening`](https://github.com/silico-quantum/tadf-screening) | TADF/OLED screening workflow |
+
+---
 
 ## 📄 License
+
 MIT
 
 ---
