@@ -9,13 +9,15 @@ module load momap/2024A-openmpi          # or via module
 
 ## Input Format Summary
 
-| Calculation | Top Flag | Namelist Block | Key Files |
-|------------|----------|---------------|-----------|
-| EVC (electron-vibration coupling) | `do_evc = 1` | `&evc` | `.log` + `.fchk` × 2 |
-| Spectrum (TVCF) | `do_spec_tvcf_ft = 1` + `do_spec_tvcf_spec = 1` | `&spec_tvcf` | `evc.cart.dat` |
-| ISC rate | `do_isc = 1` | `&isc` | S1 + T1 `.log`/`.fchk` |
-| IC rate | `do_ic = 1` | `&ic` | S0 + S1 `.log`/`.fchk` + NACME |
-| Transport | `do_transport = 1` | `&transport` | Dimer logs |
+| Calculation | Top Flag | Namelist Block | Key Files | OLED Use |
+|------------|----------|---------------|-----------|----------|
+| EVC | `do_evc = 1` | `&evc` | `.log` + `.fchk` × 2 | Duschinsky + HR |
+| Fluorescence | `do_spec_tvcf_ft = 1` + `do_spec_tvcf_spec = 1` | `&spec_tvcf` | `evc.cart.dat` | k_r, emission λ |
+| Internal Conv. | `do_ic_tvcf_ft = 1` + `do_ic_tvcf_spec = 1` | `&ic_tvcf` | EVC + NACME | k_IC |
+| ISC / Phosphor. | `do_isc_tvcf_ft = 1` + `do_isc_tvcf_spec = 1` | `&isc_tvcf` | EVC + Hso | k_ISC, Φ_phos |
+| Sum-over-states | `do_spec_sums = 1` | `&spec_sums` | EVC + all dipoles | Φ, all rates |
+| Spin-orbit coupling | `do_pysoc = 1` | `&pysoc` | Gaussian TDDFT com | Hso values |
+| Charge transport | `do_transport_* = 1` | `&transport` | Dimer logs + .cif | μ_h, μ_e |
 
 ## EVC Quick Template
 
@@ -96,6 +98,67 @@ Plot column 4 vs column 6 (emission) or 4 vs 5 (absorption).
 
 ```bash
 ls /opt/MOMAP-2024A/tests/
-# azulene/  Irppy3/  porphine/  transport/  numfreq/
-# Each: gaussian/  kr/  kic/  kisc/  evc/  ...
+# azulene/  Irppy3/  porphine/  transport/  numfreq/  pysoc/
+# Each: gaussian/  kr/  kic/  kisc/  evc/  sumstat/
+```
+
+## OLED Quick Templates
+
+### isc_tvcf (phosphorescence + k_ISC)
+```
+do_isc_tvcf_ft   = 1
+do_isc_tvcf_spec = 1
+&isc_tvcf
+  DUSHIN  = .t.           Temp  = 298 K
+  tmax    = 5000 fs       dt    = 0.001 fs
+  Ead     = 0.094 au      Hso   = 116.9 cm-1  ← from PySOC
+  DSFile  = "evc.cart.dat"
+  Emax    = 0.3 au
+/
+```
+
+### ic_tvcf (internal conversion)
+```
+do_ic_tvcf_ft   = 1
+do_ic_tvcf_spec = 1
+&ic_tvcf
+  DUSHIN  = .t.           Temp  = 300 K
+  tmax    = 655 fs        dt    = 0.01 fs
+  Ead     = 0.094 au      DSFile  = "evc.cart.dat"
+  CoulFile = "evc.cart.nac"  ← NACME required
+/
+```
+
+### spec_sums (all rates + Φ)
+```
+do_spec_sums = 1
+&spec_sums
+  DSFile     = "evc.cart.dat"
+  Ead        = 0.094 au
+  dipole_abs = 0.09 debye   dipole_emi = 0.44 debye
+  maxvib     = 10           if_cal_ic  = .t.
+  FWHM       = 500 cm-1
+/
+```
+
+### pysoc (spin-orbit coupling)
+```
+do_pysoc = 1
+&pysoc
+  sched_type = local        qc_exe = g16
+  pysoc_QM_code = 'gauss_tddft'
+  pysoc_QM_input_file = mol.com
+  n_excited_singlets = 4    n_excited_triplets = 4
+/
+```
+
+### transport (carrier mobility)
+```
+&transport
+  do_transport_* = 1       # all stages enabled
+  compute_engine = 1       qc_exe = g16
+  basis_name = b3lyp STO-3g
+  temp = 300               ratetype = marcus
+  crystal = molecule.cif
+/
 ```

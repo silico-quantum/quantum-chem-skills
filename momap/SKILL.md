@@ -96,17 +96,140 @@ momap -i momap.inp
 #1Energy(Hartree) 2Energy(eV) 3Wavenumber(cm-1) 4Wavelength(nm) 5FC_abs 6FC_emi 7FC_emi_intensity
 ```
 
-### Step 3: ISC / IC Rates
+### Step 3: ISC Rate (isc_tvcf)
 
 ```
-do_isc = 1
+do_isc_tvcf_ft   = 1       # Fourier transform
+do_isc_tvcf_spec = 1       # Phosphorescence spectrum
 
-&isc
-  ffreq(1) = "mol-s1.log"   # S1 frequency
-  ffreq(2) = "mol-t1.log"   # T1 frequency
-  Temp     = 300 K
+&isc_tvcf
+  DUSHIN   = .t.
+  Temp     = 298 K
+  tmax     = 5000 fs
+  dt       = 0.001 fs
+  Ead      = 0.094 au     # S1-T1 adiabatic gap
+  Hso      = 116.9 cm-1   # ⚠️ Spin-orbit coupling (from PySOC or exp.)
+  DSFile   = "evc.cart.dat"
+  Emax     = 0.3 au
+  logFile  = "isc.tvcf.log"
+  FtFile   = "isc.tvcf.ft.dat"
+  FoFile   = "isc.tvcf.fo.dat"
 /
 ```
+
+**Output:** ISC rate (k_ISC), phosphorescence spectrum.
+
+### Step 4: Internal Conversion (ic_tvcf)
+
+```
+do_ic_tvcf_ft   = 1
+do_ic_tvcf_spec = 1
+
+&ic_tvcf
+  DUSHIN   = .t.
+  Temp     = 300 K
+  tmax     = 655 fs
+  dt       = 0.01 fs
+  Ead      = 0.094 au
+  DSFile   = "evc.cart.dat"
+  CoulFile = "evc.cart.nac"  # ⚠️ Non-adiabatic coupling
+  logFile  = "ic.tvcf.log"
+  FtFile   = "ic.tvcf.ft.dat"
+/
+```
+
+**Output:** IC rate (k_IC) — non-radiative decay S₁→S₀.
+
+### Step 5: Spin-Orbit Coupling (PySOC)
+
+Auto-generates SOC matrix elements from TDDFT:
+
+```
+do_pysoc = 1
+
+&pysoc
+  sched_type = local
+  qc_exe     = g16
+  qc_ppn     = 8
+  pysoc_QM_code = 'gauss_tddft'
+  n_excited_singlets = 4
+  n_excited_triplets = 4
+/
+```
+
+**Output:** Hso values (cm⁻¹) for S₁→T₁, S₁→T₂, ... → feeds into isc_tvcf.
+
+### Step 6: Full Rate Summary (spec_sums)
+
+Sum-over-states method — computes k_r, k_IC, k_ISC simultaneously:
+
+```
+do_spec_sums = 1
+
+&spec_sums
+  DSFile     = "evc.cart.dat"
+  Ead        = 0.094 au
+  dipole_abs = 0.092 debye
+  dipole_emi = 0.441 debye
+  maxvib     = 10
+  if_cal_ic  = .t.
+  FWHM       = 500 cm-1
+/
+```
+
+**Output:** All rates + quantum yield Φ in one pass.
+
+### Step 7: Charge Transport (transport)
+
+Carrier mobility for OLED charge balance:
+
+```
+&transport
+  do_transport_prepare              = 1
+  do_transport_get_transferintegral = 1
+  do_transport_get_re_evc           = 1
+  do_transport_run_MC               = 1
+  do_transport_get_mob_MC           = 1
+  compute_engine  = 1            # Gaussian
+  qc_exe          = g16
+  basis_name      = b3lyp STO-3g
+  temp            = 300
+  ratetype        = marcus       # marcus or quanta
+  lat_cutoff      = 4
+  nsimu           = 2000
+  tsimu           = 1000         # ns
+  crystal         = molecule.cif
+/
+```
+
+**Output:** Hole/electron mobility (cm²/V·s), transfer integrals, reorganization energies.
+
+## OLED TADF Design — Complete Workflow
+
+```
+       Gaussian                          MOMAP
+  ┌──────────────┐              ┌─────────────────────┐
+  │ S0 opt+freq  │──────┐       │ EVC (S₁→S₀)         │
+  │ S1 opt+freq  │      ├──────→│ EVC (S₁→T₁)         │
+  │ T1 opt+freq  │──────┘       │                     │
+  │ NACT calc    │──→ NACME ──→│ ic_tvcf   → k_IC    │
+  │ PySOC calc   │──→ Hso  ───→│ isc_tvcf  → k_ISC   │
+  │ TDDFT (vert) │──→ EDMA/EDME│ spec_tvcf → k_r     │
+  └──────────────┘              │ spec_sums → Φ (QY)  │
+                                │ transport → μ_h, μ_e│
+                                └─────────────────────┘
+```
+
+**Key OLED figures of merit:**
+| Quantity | MOMAP Module | Required Input |
+|----------|-------------|---------------|
+| k_r (radiative) | spec_tvcf | EVC + EDMA/EDME |
+| k_IC (internal conv.) | ic_tvcf | EVC + NACME |
+| k_ISC (S₁→T₁) | isc_tvcf | EVC + Hso (SOC) |
+| k_RISC (T₁→S₁) | isc_tvcf | k_ISC × exp(-ΔE_ST/kT) |
+| Φ (quantum yield) | spec_sums | all above |
+| μ_h (hole mobility) | transport | Transfer integral + λ |
+| μ_e (electron mob.) | transport | Transfer integral + λ |
 
 ## Extracting Parameters from Gaussian Output
 

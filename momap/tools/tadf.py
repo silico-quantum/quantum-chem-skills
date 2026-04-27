@@ -217,10 +217,9 @@ def process_molecule(mol_id, s0_log, s1_log, t1_log, output_dir, temperature=300
     else:
         print(f"  ⚠️  Spectrum calculation had issues")
     
-    # Step 3: ISC (S1→T1) if T1 available
+    # Step 3: isc_tvcf (phosphorescence + k_ISC) if T1 + Hso available
     if t1_log and Path(t1_log).exists():
-        print(f"\n  🔀 Step 3: ISC (S1→T1)")
-        # First need EVC for S1→T1
+        print(f"\n  🔀 Step 3: ISC TVCF (S1→T1 phosphorescence)")
         evc_isc_input = mol_dir / 'momap_evc_isc.inp'
         with open(evc_isc_input, 'w') as f:
             f.write(f"""do_evc = 1
@@ -232,11 +231,31 @@ def process_molecule(mol_id, s0_log, s1_log, t1_log, output_dir, temperature=300
 /
 """)
         ok = run_momap_in_dir(evc_isc_input, mol_dir)
-        
-        # TODO: ISC rate calculation — needs do_isc block
-        # For now, just note that EVC is ready
         if ok:
-            print(f"  ✅ EVC (S1→T1) complete, ready for ISC calculation")
+            # Generate isc_tvcf input with placeholder Hso
+            isc_input = mol_dir / 'momap_isc.inp'
+            with open(isc_input, 'w') as f:
+                f.write(f"""do_isc_tvcf_ft   = 1
+do_isc_tvcf_spec = 1
+
+&isc_tvcf
+  DUSHIN  = .t.
+  Temp    = {temperature} K
+  tmax    = 5000 fs
+  dt      = 0.001 fs
+  Ead     = {abs(E_S1 - E_T1):.8f} au
+  Hso     = 1.0 cm-1
+  DSFile  = "evc.cart.dat"
+  Emax    = 0.3 au
+  logFile = "isc.tvcf.log"
+  FtFile  = "isc.tvcf.ft.dat"
+  FoFile  = "isc.tvcf.fo.dat"
+/
+""")
+            ok_isc = run_momap_in_dir(isc_input, mol_dir)
+            print(f"  {'✅' if ok_isc else '⚠️ '} ISC TVCF {'complete' if ok_isc else 'had issues'}")
+        else:
+            print(f"  ❌ EVC (S1→T1) failed")
     
     results['success'] = True
     results['output_dir'] = str(mol_dir)
