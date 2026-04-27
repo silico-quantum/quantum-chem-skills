@@ -1,0 +1,609 @@
+#INFO: **** input file is /private/tmp/quantum-chem-skills/pyscf/references/benzene-dft-tddft.py ****
+#!/usr/bin/env python3
+"""PySCF Benzene: DFT + TDDFT (PySCF 2.12.1)
+Tested: 2026-03-27 on macOS arm64, PySCF 2.12.1, Python 3.14
+"""
+from pyscf import gto, dft, tdscf
+from pyscf.tools import cubegen
+from pyscf import solvent
+import numpy as np
+
+benzene_xyz = """
+C   0.000000   1.395000   0.000000
+C   1.208543   0.697500   0.000000
+C   1.208543  -0.697500   0.000000
+C   0.000000  -1.395000   0.000000
+C  -1.208543  -0.697500   0.000000
+C  -1.208543   0.697500   0.000000
+H   0.000000   2.479000   0.000000
+H   2.150000   1.239500   0.000000
+H   2.150000  -1.239500   0.000000
+H   0.000000  -2.479000   0.000000
+H  -2.150000  -1.239500   0.000000
+H  -2.150000   1.239500   0.000000
+"""
+
+mol = gto.M(atom=benzene_xyz, basis='cc-pvdz', charge=0, spin=0,
+            symmetry=True, verbose=4)
+print(f"\n{'='*60}")
+print(f"Benzene: {mol.natm} atoms, {mol.nao_nr()} AOs, {mol.groupname}")
+print(f"{'='*60}")
+
+# === 1. Ground State DFT ===
+mf = dft.RKS(mol)
+mf.xc = 'b3lyp'
+mf.grids.atom_grid = (99, 590)
+mf.conv_tol = 1e-10
+mf.kernel()
+
+occ = np.where(mf.mo_occ > 0)[0]
+virt = np.where(mf.mo_occ == 0)[0]
+homo_e, lumo_e = mf.mo_energy[occ[-1]], mf.mo_energy[virt[0]]
+
+print(f"\n--- Ground State ---")
+print(f"Energy: {mf.e_tot:.8f} Ha ({mf.e_tot*27.2114:.4f} eV)")
+print(f"HOMO:  {homo_e:.6f} Ha ({homo_e*27.2114:.4f} eV)")
+print(f"LUMO:  {lumo_e:.6f} Ha ({lumo_e*27.2114:.4f} eV)")
+print(f"Gap:   {lumo_e-homo_e:.6f} Ha ({(lumo_e-homo_e)*27.2114:.4f} eV)")
+
+# === 2. LR-TDDFT ===
+td = tdscf.TDDFT(mf)
+td.nstates = 10
+td.kernel()
+osc = td.oscillator_strength()
+
+print(f"\n--- LR-TDDFT (B3LYP/cc-pVDZ) ---")
+print(f"{'State':>6} {'E(eV)':>10} {'nm':>8} {'f':>10}")
+print("-" * 38)
+for i in range(td.nstates):
+    e = td.e[i] * 27.2114
+    print(f"  S{i+1:>2} {e:>8.4f} {1240.0/e:>7.1f} {osc[i]:>10.4f}")
+
+# === 3. TDA ===
+td2 = tdscf.TDA(mf)
+td2.nstates = 6
+td2.kernel()
+osc2 = td2.oscillator_strength()
+
+print(f"\n--- TDA (B3LYP/cc-pVDZ) ---")
+print(f"{'State':>6} {'E(eV)':>10} {'nm':>8} {'f':>10}")
+print("-" * 38)
+for i in range(td2.nstates):
+    e = td2.e[i] * 27.2114
+    print(f"  S{i+1:>2} {e:>8.4f} {1240.0/e:>7.1f} {osc2[i]:>10.4f}")
+
+# === 4. NTO ===
+b = int(np.argmax(osc))
+w, _ = td.get_nto(state=b+1)
+print(f"\n--- NTO (S{b+1}, f={osc[b]:.4f}) ---")
+print(f"Weights: {w[:5]}")
+
+# === 5. Mulliken ===
+pop = mf.mulliken_pop()
+print(f"\n--- Mulliken ---")
+for i in range(mol.natm):
+    print(f"  {mol.atom_symbol(i)}{i+1:>2}: q={pop[0][i]:+.4f}")
+
+# === 6. Density Fitting ===
+mf_df = dft.RKS(mol)
+mf_df.xc = 'b3lyp'
+mf_df = mf_df.density_fit(auxbasis='cc-pvdz-jkfit')
+mf_df.kernel()
+print(f"\n--- DF: {mf_df.e_tot:.8f} Ha, diff={(mf_df.e_tot-mf.e_tot)*27.2114:.4f} eV ---")
+
+# === 7. PCM (ddPCM) ===
+try:
+    mf_pcm = solvent.ddPCM(dft.RKS(mol))
+    mf_pcm.xc = 'b3lyp'
+    mf_pcm.with_solvent.eps = 2.0
+    mf_pcm.kernel()
+    print(f"--- PCM: {mf_pcm.e_tot:.8f} Ha, shift={(mf_pcm.e_tot-mf.e_tot)*27.2114:.4f} eV ---")
+except Exception as e:
+    print(f"--- PCM skipped: {e} ---")
+
+# === 8. Cube files ===
+import os
+# Cube files need non-symmetrized mol for cubegen compatibility
+mol_nosym = gto.M(atom=benzene_xyz, basis='cc-pvdz', charge=0, spin=0, symmetry=False, verbose=0)
+mf_nosym = dft.RKS(mol_nosym)
+mf_nosym.xc = 'b3lyp'
+mf_nosym.kernel()
+occ_n = np.where(mf_nosym.mo_occ > 0)[0]
+virt_n = np.where(mf_nosym.mo_occ == 0)[0]
+outdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'examples', 'pyscf')
+os.makedirs(outdir, exist_ok=True)
+homo_path = os.path.join(outdir, 'benzene_homo.cube')
+lumo_path = os.path.join(outdir, 'benzene_lumo.cube')
+cubegen.orbital(mol_nosym, homo_path, mf_nosym.mo_coeff[:, occ_n[-1]])
+cubegen.orbital(mol_nosym, lumo_path, mf_nosym.mo_coeff[:, virt_n[0]])
+print(f"\nCube files: {homo_path}, {lumo_path}")
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Darwin', node='MolBotdeMac-mini-2.local', release='25.1.0', version='Darwin Kernel Version 25.1.0: Mon Oct 20 19:32:56 PDT 2025; root:xnu-12377.41.6~2/RELEASE_ARM64_T8132', machine='arm64')  Threads 1
+Python 3.14.2 (main, Dec  5 2025, 16:49:16) [Clang 17.0.0 (clang-1700.6.3.2)]
+numpy 2.4.2  scipy 1.17.1  h5py 3.15.1
+Date: Fri Mar 27 10:45:03 2026
+PySCF version 2.12.1
+PySCF path  /opt/homebrew/lib/python3.14/site-packages/pyscf
+
+[CONFIG] conf_file None
+[INPUT] verbose = 4
+[INPUT] num. atoms = 12
+[INPUT] num. electrons = 42
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry True subgroup None
+[INPUT] Mole.unit = angstrom
+[INPUT] Symbol           X                Y                Z      unit          X                Y                Z       unit  Magmom
+[INPUT]  1 C      0.000000000000   1.395000000000   0.000000000000 AA    0.000000000000   2.636167943768   0.000000000000 Bohr   0.0
+[INPUT]  2 C      1.208543000000   0.697500000000   0.000000000000 AA    2.283815279760   1.318083971884   0.000000000000 Bohr   0.0
+[INPUT]  3 C      1.208543000000  -0.697500000000   0.000000000000 AA    2.283815279760  -1.318083971884   0.000000000000 Bohr   0.0
+[INPUT]  4 C      0.000000000000  -1.395000000000   0.000000000000 AA    0.000000000000  -2.636167943768   0.000000000000 Bohr   0.0
+[INPUT]  5 C     -1.208543000000  -0.697500000000   0.000000000000 AA   -2.283815279760  -1.318083971884   0.000000000000 Bohr   0.0
+[INPUT]  6 C     -1.208543000000   0.697500000000   0.000000000000 AA   -2.283815279760   1.318083971884   0.000000000000 Bohr   0.0
+[INPUT]  7 H      0.000000000000   2.479000000000   0.000000000000 AA    0.000000000000   4.684631062797   0.000000000000 Bohr   0.0
+[INPUT]  8 H      2.150000000000   1.239500000000   0.000000000000 AA    4.062911167815   2.342315531398   0.000000000000 Bohr   0.0
+[INPUT]  9 H      2.150000000000  -1.239500000000   0.000000000000 AA    4.062911167815  -2.342315531398   0.000000000000 Bohr   0.0
+[INPUT] 10 H      0.000000000000  -2.479000000000   0.000000000000 AA    0.000000000000  -4.684631062797   0.000000000000 Bohr   0.0
+[INPUT] 11 H     -2.150000000000  -1.239500000000   0.000000000000 AA   -4.062911167815  -2.342315531398   0.000000000000 Bohr   0.0
+[INPUT] 12 H     -2.150000000000   1.239500000000   0.000000000000 AA   -4.062911167815   2.342315531398   0.000000000000 Bohr   0.0
+
+nuclear repulsion = 203.396585624218
+point group symmetry = D2h
+symmetry origin: [ 0.00000000e+00 -6.34413157e-17  0.00000000e+00]
+symmetry axis x: [1. 0. 0.]
+symmetry axis y: [0. 1. 0.]
+symmetry axis z: [0. 0. 1.]
+num. orbitals of irrep Ag = 24
+num. orbitals of irrep B1g = 18
+num. orbitals of irrep B2g = 6
+num. orbitals of irrep B3g = 9
+num. orbitals of irrep Au = 6
+num. orbitals of irrep B1u = 9
+num. orbitals of irrep B2u = 24
+num. orbitals of irrep B3u = 18
+number of shells = 48
+number of NR pGTOs = 198
+number of NR cGTOs = 114
+basis = cc-pvdz
+ecp = {}
+CPU time:         0.32
+
+============================================================
+Benzene: 12 atoms, 114 AOs, D2h
+============================================================
+
+
+******** <class 'pyscf.dft.rks_symm.SymAdaptedRKS'> ********
+method = SymAdaptedRKS
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+diis_damp = 0
+SCF conv_tol = 1e-10
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /var/folders/w9/v6gq_4551j7brswqwg34jkn80000gn/T/tmptofrocik
+max_memory 4000 MB (current use 0 MB)
+XC library pyscf.dft.libxc version 7.0.0
+    S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
+XC functionals = b3lyp
+    P. J. Stephens, F. J. Devlin, C. F. Chabalowski, and M. J. Frisch.,  J. Phys. Chem. 98, 11623 (1994)
+radial grids: 
+Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
+
+becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
+pruning grids: <function nwchem_prune at 0x122368720>
+grids dens level: 3
+symmetrized grids: True
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1223685c0>
+User specified grid scheme (99, 590)
+small_rho_cutoff = 1e-07
+Freeze 0 electrons in irreps []
+    42 free electrons in irreps Ag B1g B2g B3g Au B1u B2u B3u
+Set gradient conv threshold to 1e-05
+Initial guess from minao.
+tot grids = 387288
+init E= -233.116493285058
+HOMO (B3g) = -0.302023695291471  LUMO (B1u) = -0.0903103833752061
+cycle= 1 E= -232.226239551173  delta_E= 0.89  |g|= 0.346  |ddm|= 3.65
+HOMO (B3g) = -0.194752512773184  LUMO (B1u) = 0.0479259113275842
+cycle= 2 E= -232.220827075951  delta_E= 0.00541  |g|= 0.388  |ddm|= 0.925
+HOMO (B3g) = -0.253263978805633  LUMO (B1u) = -0.00521052558175198
+cycle= 3 E= -232.262577451616  delta_E= -0.0418  |g|= 0.0203  |ddm|= 0.419
+HOMO (B3g) = -0.253777428524558  LUMO (B1u) = -0.00624961191814214
+cycle= 4 E= -232.262667743953  delta_E= -9.03e-05  |g|= 0.00507  |ddm|= 0.0204
+HOMO (B3g) = -0.253430634000593  LUMO (B1u) = -0.00578975383782064
+cycle= 5 E= -232.262674447647  delta_E= -6.7e-06  |g|= 0.000124  |ddm|= 0.00576
+HOMO (B3g) = -0.253405100794544  LUMO (B1u) = -0.00576905451280506
+cycle= 6 E= -232.262674447566  delta_E= 8.13e-11  |g|= 0.000131  |ddm|= 0.000221
+HOMO (B3g) = -0.253410196075311  LUMO (B1u) = -0.00577250512253669
+cycle= 7 E= -232.262674451801  delta_E= -4.24e-09  |g|= 5.54e-06  |ddm|= 0.000111
+HOMO (B3g) = -0.253409557257928  LUMO (B1u) = -0.00577206597678772
+cycle= 8 E= -232.26267445181  delta_E= -8.36e-12  |g|= 1.99e-07  |ddm|= 6.86e-06
+HOMO (B3g) = -0.253409522839608  LUMO (B1u) = -0.00577202139546028
+Extra cycle  E= -232.262674451811  delta_E= -8.53e-13  |g|= 7.9e-08  |ddm|= 3.5e-07
+converged SCF energy = -232.262674451811
+
+--- Ground State ---
+Energy: -232.26267445 Ha (-6320.1925 eV)
+HOMO:  -0.253410 Ha (-6.8956 eV)
+LUMO:  -0.005772 Ha (-0.1571 eV)
+Gap:   0.247638 Ha (6.7386 eV)
+
+
+******** <class 'pyscf.tdscf.rks.TDDFT'> for <class 'pyscf.dft.rks_symm.SymAdaptedRKS'> ********
+nstates = 10 singlet
+deg_eia_thresh = 1.000e-03
+wfnsym = None
+conv_tol = 1e-05
+eigh lindep = 1e-12
+eigh level_shift = 0
+eigh max_cycle = 100
+chkfile = /var/folders/w9/v6gq_4551j7brswqwg34jkn80000gn/T/tmptofrocik
+max_memory 4000 MB (current use 0 MB)
+
+
+Excited State energies (eV)
+[5.4951406  6.23070622 7.27756758 7.2781338  7.44892442 7.45143462
+ 7.73077972 7.83394071 7.83459483 7.84364968]
+
+--- LR-TDDFT (B3LYP/cc-pVDZ) ---
+ State      E(eV)       nm          f
+--------------------------------------
+  S 1   5.4951   225.7     0.0000
+  S 2   6.2307   199.0     0.0000
+  S 3   7.2776   170.4     0.5737
+  S 4   7.2781   170.4     0.5733
+  S 5   7.4489   166.5     0.0000
+  S 6   7.4514   166.4     0.0000
+  S 7   7.7308   160.4     0.0000
+  S 8   7.8339   158.3     0.0005
+  S 9   7.8346   158.3     0.0000
+  S10   7.8437   158.1     0.0076
+
+
+******** <class 'pyscf.tdscf.rks.TDA'> for <class 'pyscf.dft.rks_symm.SymAdaptedRKS'> ********
+nstates = 6 singlet
+deg_eia_thresh = 1.000e-03
+wfnsym = None
+conv_tol = 1e-05
+eigh lindep = 1e-12
+eigh level_shift = 0
+eigh max_cycle = 100
+chkfile = /var/folders/w9/v6gq_4551j7brswqwg34jkn80000gn/T/tmptofrocik
+max_memory 4000 MB (current use 0 MB)
+
+
+Excited State energies (eV)
+[5.52091753 6.48121233 7.45217093 7.45473682 7.92361976 7.92449558]
+
+--- TDA (B3LYP/cc-pVDZ) ---
+ State      E(eV)       nm          f
+--------------------------------------
+  S 1   5.5209   224.6     0.0000
+  S 2   6.4812   191.3     0.0000
+  S 3   7.4522   166.4     0.0000
+  S 4   7.4547   166.3     0.0000
+  S 5   7.9236   156.5     0.9341
+  S 6   7.9245   156.5     0.9334
+State 3: 7.27757 eV  NTO largest component 0.4819109650284459
+    occ-NTO: 1.000000 (MO #20)
+    vir-NTO: 0.998567 (MO #22)
+
+--- NTO (S3, f=0.5737) ---
+Weights: [0.48191097 0.48051885 0.00784539 0.00769529 0.00765247]
+ ** Mulliken pop  **
+pop of  0 C 1s            2.01348
+pop of  0 C 2s            0.67356
+pop of  0 C 3s            0.41567
+pop of  0 C 2px           0.77096
+pop of  0 C 2py           0.74866
+pop of  0 C 2pz           0.57426
+pop of  0 C 3px           0.20520
+pop of  0 C 3py           0.09446
+pop of  0 C 3pz           0.40292
+pop of  0 C 3dxy          0.01876
+pop of  0 C 3dyz          0.00391
+pop of  0 C 3dz^2         0.00301
+pop of  0 C 3dxz          0.01274
+pop of  0 C 3dx2-y2       0.02776
+pop of  1 C 1s            2.01346
+pop of  1 C 2s            0.67367
+pop of  1 C 3s            0.41695
+pop of  1 C 2px           0.75351
+pop of  1 C 2py           0.76540
+pop of  1 C 2pz           0.57424
+pop of  1 C 3px           0.12272
+pop of  1 C 3py           0.17875
+pop of  1 C 3pz           0.40286
+pop of  1 C 3dxy          0.02549
+pop of  1 C 3dyz          0.01054
+pop of  1 C 3dz^2         0.00301
+pop of  1 C 3dxz          0.00612
+pop of  1 C 3dx2-y2       0.02104
+pop of  2 C 1s            2.01346
+pop of  2 C 2s            0.67367
+pop of  2 C 3s            0.41695
+pop of  2 C 2px           0.75351
+pop of  2 C 2py           0.76540
+pop of  2 C 2pz           0.57424
+pop of  2 C 3px           0.12272
+pop of  2 C 3py           0.17875
+pop of  2 C 3pz           0.40286
+pop of  2 C 3dxy          0.02549
+pop of  2 C 3dyz          0.01054
+pop of  2 C 3dz^2         0.00301
+pop of  2 C 3dxz          0.00612
+pop of  2 C 3dx2-y2       0.02104
+pop of  3 C 1s            2.01348
+pop of  3 C 2s            0.67356
+pop of  3 C 3s            0.41567
+pop of  3 C 2px           0.77096
+pop of  3 C 2py           0.74866
+pop of  3 C 2pz           0.57426
+pop of  3 C 3px           0.20520
+pop of  3 C 3py           0.09446
+pop of  3 C 3pz           0.40292
+pop of  3 C 3dxy          0.01876
+pop of  3 C 3dyz          0.00391
+pop of  3 C 3dz^2         0.00301
+pop of  3 C 3dxz          0.01274
+pop of  3 C 3dx2-y2       0.02776
+pop of  4 C 1s            2.01346
+pop of  4 C 2s            0.67367
+pop of  4 C 3s            0.41695
+pop of  4 C 2px           0.75351
+pop of  4 C 2py           0.76540
+pop of  4 C 2pz           0.57424
+pop of  4 C 3px           0.12272
+pop of  4 C 3py           0.17875
+pop of  4 C 3pz           0.40286
+pop of  4 C 3dxy          0.02549
+pop of  4 C 3dyz          0.01054
+pop of  4 C 3dz^2         0.00301
+pop of  4 C 3dxz          0.00612
+pop of  4 C 3dx2-y2       0.02104
+pop of  5 C 1s            2.01346
+pop of  5 C 2s            0.67367
+pop of  5 C 3s            0.41695
+pop of  5 C 2px           0.75351
+pop of  5 C 2py           0.76540
+pop of  5 C 2pz           0.57424
+pop of  5 C 3px           0.12272
+pop of  5 C 3py           0.17875
+pop of  5 C 3pz           0.40286
+pop of  5 C 3dxy          0.02549
+pop of  5 C 3dyz          0.01054
+pop of  5 C 3dz^2         0.00301
+pop of  5 C 3dxz          0.00612
+pop of  5 C 3dx2-y2       0.02104
+pop of  6 H 1s            0.76724
+pop of  6 H 2s            0.23748
+pop of  6 H 2px           0.00445
+pop of  6 H 2py           0.01816
+pop of  6 H 2pz           0.00624
+pop of  7 H 1s            0.76614
+pop of  7 H 2s            0.23789
+pop of  7 H 2px           0.01471
+pop of  7 H 2py           0.00784
+pop of  7 H 2pz           0.00620
+pop of  8 H 1s            0.76614
+pop of  8 H 2s            0.23789
+pop of  8 H 2px           0.01471
+pop of  8 H 2py           0.00784
+pop of  8 H 2pz           0.00620
+pop of  9 H 1s            0.76724
+pop of  9 H 2s            0.23748
+pop of  9 H 2px           0.00445
+pop of  9 H 2py           0.01816
+pop of  9 H 2pz           0.00624
+pop of  10 H 1s           0.76614
+pop of  10 H 2s           0.23789
+pop of  10 H 2px          0.01471
+pop of  10 H 2py          0.00784
+pop of  10 H 2pz          0.00620
+pop of  11 H 1s           0.76614
+pop of  11 H 2s           0.23789
+pop of  11 H 2px          0.01471
+pop of  11 H 2py          0.00784
+pop of  11 H 2pz          0.00620
+ ** Mulliken atomic charges  **
+charge of    0C =      0.03465
+charge of    1C =      0.03223
+charge of    2C =      0.03223
+charge of    3C =      0.03465
+charge of    4C =      0.03223
+charge of    5C =      0.03223
+charge of    6H =     -0.03357
+charge of    7H =     -0.03277
+charge of    8H =     -0.03277
+charge of    9H =     -0.03357
+charge of   10H =     -0.03277
+charge of   11H =     -0.03277
+
+--- Mulliken ---
+  C 1: q=+2.0135
+  C 2: q=+0.6736
+  C 3: q=+0.4157
+  C 4: q=+0.7710
+  C 5: q=+0.7487
+  C 6: q=+0.5743
+  H 7: q=+0.2052
+  H 8: q=+0.0945
+  H 9: q=+0.4029
+  H10: q=+0.0188
+  H11: q=+0.0039
+  H12: q=+0.0030
+
+
+******** <class 'pyscf.df.df_jk.DFSymAdaptedRKS'> ********
+method = DFSymAdaptedRKS
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+diis_damp = 0
+SCF conv_tol = 1e-09
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = False
+chkfile to save SCF result = /var/folders/w9/v6gq_4551j7brswqwg34jkn80000gn/T/tmpznf66c6v
+max_memory 4000 MB (current use 0 MB)
+XC library pyscf.dft.libxc version 7.0.0
+    S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
+XC functionals = b3lyp
+    P. J. Stephens, F. J. Devlin, C. F. Chabalowski, and M. J. Frisch.,  J. Phys. Chem. 98, 11623 (1994)
+radial grids: 
+Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
+
+becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
+pruning grids: <function nwchem_prune at 0x122368720>
+grids dens level: 3
+symmetrized grids: True
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1223685c0>
+small_rho_cutoff = 1e-07
+Freeze 0 electrons in irreps []
+    42 free electrons in irreps Ag B1g B2g B3g Au B1u B2u B3u
+Set gradient conv threshold to 3.16228e-05
+Initial guess from minao.
+tot grids = 143560
+******** <class 'pyscf.df.df.DF'> ********
+auxbasis = cc-pvdz-jkfit
+max_memory = 4000
+init E= -233.116484868255
+HOMO (B3g) = -0.302014327689742  LUMO (B1u) = -0.0903065276297389
+cycle= 1 E= -232.226247806753  delta_E= 0.89  |g|= 0.346  |ddm|= 3.65
+HOMO (B3g) = -0.194748298619963  LUMO (B1u) = 0.0479221221412166
+cycle= 2 E= -232.220848559916  delta_E= 0.0054  |g|= 0.387  |ddm|= 0.924
+HOMO (B3g) = -0.253255781829919  LUMO (B1u) = -0.00521184487722652
+cycle= 3 E= -232.26257999161  delta_E= -0.0417  |g|= 0.0203  |ddm|= 0.419
+HOMO (B3g) = -0.253770053394753  LUMO (B1u) = -0.00625186877756272
+cycle= 4 E= -232.262670095964  delta_E= -9.01e-05  |g|= 0.00506  |ddm|= 0.0204
+HOMO (B3g) = -0.253423887969616  LUMO (B1u) = -0.0057926812293457
+cycle= 5 E= -232.262676790151  delta_E= -6.69e-06  |g|= 0.000124  |ddm|= 0.00577
+HOMO (B3g) = -0.253398215784795  LUMO (B1u) = -0.0057718699498119
+cycle= 6 E= -232.262676790062  delta_E= 8.88e-11  |g|= 0.000131  |ddm|= 0.000222
+HOMO (B3g) = -0.253403320354674  LUMO (B1u) = -0.00577532509354146
+cycle= 7 E= -232.262676794333  delta_E= -4.27e-09  |g|= 5.49e-06  |ddm|= 0.000111
+HOMO (B3g) = -0.253402685486712  LUMO (B1u) = -0.00577488928243767
+cycle= 8 E= -232.262676794342  delta_E= -8.92e-12  |g|= 1.99e-07  |ddm|= 6.83e-06
+HOMO (B3g) = -0.253402651732116  LUMO (B1u) = -0.00577484539282478
+Extra cycle  E= -232.262676794341  delta_E= 1.25e-12  |g|= 7.97e-08  |ddm|= 3.53e-07
+converged SCF energy = -232.262676794341
+/opt/homebrew/lib/python3.14/site-packages/pyscf/solvent/ddpcm.py:38: UserWarning: Module ddPCM is under testing
+  warnings.warn('Module ddPCM is under testing')
+
+--- DF: -232.26267679 Ha, diff=-0.0001 eV ---
+
+
+******** <class 'pyscf.solvent._attach_solvent.ddPCMSymAdaptedRKS'> ********
+method = ddPCMSymAdaptedRKS
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+diis_damp = 0
+SCF conv_tol = 1e-09
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /var/folders/w9/v6gq_4551j7brswqwg34jkn80000gn/T/tmpjioaye8k
+max_memory 4000 MB (current use 0 MB)
+XC library pyscf.dft.libxc version 7.0.0
+    S. Lehtola, C. Steigemann, M. J.T. Oliveira, and M. A.L. Marques.,  SoftwareX 7, 1–5 (2018)
+XC functionals = b3lyp
+    P. J. Stephens, F. J. Devlin, C. F. Chabalowski, and M. J. Frisch.,  J. Phys. Chem. 98, 11623 (1994)
+radial grids: 
+Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
+
+becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
+pruning grids: <function nwchem_prune at 0x122368720>
+grids dens level: 3
+symmetrized grids: True
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1223685c0>
+small_rho_cutoff = 1e-07
+<class 'pyscf.solvent.ddpcm.ddPCM'> does not have attributes  method
+******** <class 'pyscf.solvent.ddpcm.ddPCM'> (In testing) ********
+
+WARN: ddPCM is an experimental feature. It is still in testing.
+Features and APIs may be changed in the future.
+
+lebedev_order = 17 (110 grids per sphere)
+lmax = 6
+eta = 0.1
+eps = 2.0
+frozen = False
+equilibrium_solvation = False
+radial grids: 
+Treutler-Ahlrichs [JCP 102, 346 (1995); DOI:10.1063/1.469408] (M4) radial grids
+
+becke partition: Becke, JCP 88, 2547 (1988); DOI:10.1063/1.454033
+pruning grids: <function nwchem_prune at 0x122368720>
+grids dens level: 3
+symmetrized grids: True
+atomic radii adjust function: <function treutler_atomic_radii_adjust at 0x1223685c0>
+Freeze 0 electrons in irreps []
+    42 free electrons in irreps Ag B1g B2g B3g Au B1u B2u B3u
+Set gradient conv threshold to 3.16228e-05
+Initial guess from minao.
+tot grids = 143560
+tot grids = 143556
+ddPCM E_diel = -1.70630154015203e-05
+Solvent Energy = -1.70630154015203e-05
+init E= -233.116517044677
+HOMO (B3g) = -0.299844224287664  LUMO (B1u) = -0.0881401632755363
+ddPCM E_diel = -0.000736991301330172
+Solvent Energy = -0.000736991301330172
+cycle= 1 E= -232.227076851102  delta_E= 0.889  |g|= 0.34  |ddm|= 3.65
+HOMO (B3g) = -0.198412539294915  LUMO (B1u) = 0.0447442303939072
+ddPCM E_diel = -4.91584088517396e-05
+Solvent Energy = -4.91584088517396e-05
+cycle= 2 E= -232.224627038455  delta_E= 0.00245  |g|= 0.372  |ddm|= 0.892
+HOMO (B3g) = -0.254029593673924  LUMO (B1u) = -0.00582788871651463
+ddPCM E_diel = -0.00033322663486822
+Solvent Energy = -0.00033322663486822
+cycle= 3 E= -232.2628684533  delta_E= -0.0382  |g|= 0.02  |ddm|= 0.396
+HOMO (B3g) = -0.254428520567621  LUMO (B1u) = -0.00673983440680703
+ddPCM E_diel = -0.000317237023457314
+Solvent Energy = -0.000317237023457314
+cycle= 4 E= -232.262975356144  delta_E= -0.000107  |g|= 0.00499  |ddm|= 0.0198
+HOMO (B3g) = -0.254087390265657  LUMO (B1u) = -0.00629057095182894
+ddPCM E_diel = -0.000318986974300833
+Solvent Energy = -0.000318986974300833
+cycle= 5 E= -232.262979983516  delta_E= -4.63e-06  |g|= 8.01e-05  |ddm|= 0.00565
+HOMO (B3g) = -0.254067560535436  LUMO (B1u) = -0.00627344540045698
+ddPCM E_diel = -0.000318984507901471
+Solvent Energy = -0.000318984507901471
+cycle= 6 E= -232.262979987103  delta_E= -3.59e-09  |g|= 3.9e-05  |ddm|= 0.000141
+HOMO (B3g) = -0.254069571451912  LUMO (B1u) = -0.00627489885804635
+ddPCM E_diel = -0.000318981353983502
+Solvent Energy = -0.000318981353983502
+cycle= 7 E= -232.262979989952  delta_E= -2.85e-09  |g|= 1.49e-05  |ddm|= 4.34e-05
+HOMO (B3g) = -0.254068609235732  LUMO (B1u) = -0.00627423645902683
+ddPCM E_diel = -0.000318980529866539
+Solvent Energy = -0.000318980529866539
+cycle= 8 E= -232.262979991563  delta_E= -1.61e-09  |g|= 2.2e-07  |ddm|= 1.25e-05
+HOMO (B3g) = -0.254068569495162  LUMO (B1u) = -0.00627418986485595
+ddPCM E_diel = -0.000318980763574313
+Solvent Energy = -0.000318980763574313
+cycle= 9 E= -232.262979991246  delta_E= 3.17e-10  |g|= 2.84e-08  |ddm|= 3.7e-07
+HOMO (B3g) = -0.254068571225559  LUMO (B1u) = -0.00627419372873962
+ddPCM E_diel = -0.000318980777720392
+Solvent Energy = -0.000318980777720392
+Extra cycle  E= -232.262979991227  delta_E= 1.87e-11  |g|= 1.02e-08  |ddm|= 4.45e-08
+converged SCF energy = -232.262979991227
+--- PCM: -232.26297999 Ha, shift=-0.0083 eV ---
+
+Cube files: /private/tmp/quantum-chem-skills/pyscf/references/../../examples/pyscf/benzene_homo.cube, /private/tmp/quantum-chem-skills/pyscf/references/../../examples/pyscf/benzene_lumo.cube

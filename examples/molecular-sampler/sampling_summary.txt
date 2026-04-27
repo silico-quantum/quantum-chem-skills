@@ -1,0 +1,12 @@
+=== Molecular Sampling Summary ===
+
+Input file: examples/molecular-sampler/benzene_cluster_N12.xyz
+Layer: L
+Total molecules: 12
+
+Sampling Results:
+  - Monomers: 12 files
+  - Dimers: 5 samples
+  - Trimers: 5 samples
+  - Tetramers: 5 samples
+  - Pentamers: 5 samples
