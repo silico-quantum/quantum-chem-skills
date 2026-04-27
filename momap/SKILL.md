@@ -220,3 +220,34 @@ All test examples with pre-computed Gaussian logs:
 - Z. Shuai, Q. Peng, *Nat. Sci. Rev.*, **2017**, 4, 224
 
 Official: http://www.momap.cn
+
+## Toolkit (momap/tools/)
+
+Four Python CLI tools for automated MOMAP workflows:
+
+### momap-extract — Gaussian → MOMAP params
+```bash
+python3 tools/extract.py --s0 mol-s0.log --s1 mol-s1.log [--t1 mol-t1.log]
+# Output: spec_tvcf input + JSON params (Ead, EDMA, EDME)
+# Auto-handles TDDFT: Ead = SCF_S1 + E_exc_adiabatic - SCF_S0
+```
+
+### momap-run — One-command MOMAP wrapper  
+```bash
+python3 tools/runner.py momap.inp [--slurm] [--nprocs 4]
+# Auto: MPI --hostfile patch, formchk (.chk→.fchk), Slurm submit
+```
+
+### momap-tadf — Full TADF pipeline
+```bash
+python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log
+# Runs: EVC(S1→S0) → spec_tvcf → ISC(S1→T1) → summary
+# Output: spectrum, peak λ, blue window check, ΔE_ST
+```
+
+### momap-plot — Spectrum visualization
+```bash
+python3 tools/plot.py spec.tvcf.spec.dat -D --blue 450 490
+# Pillow fallback if no matplotlib. -D = save to Desktop.
+# Prints peak analysis with blue window highlighting.
+```
