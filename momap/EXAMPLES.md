@@ -1,0 +1,226 @@
+# MOMAP Examples (v2 — 2024A Verified)
+
+All examples verified on marcus/marcus2 with MOMAP 2024A.
+
+---
+
+## Example 1: Azulene Full Pipeline (EVC → spec_tvcf)
+
+Shows the complete workflow: Gaussian logs → EVC → spectrum.
+
+### Setup
+
+```bash
+ssh marcus2
+mkdir ~/momap_azulene && cd ~/momap_azulene
+
+# Copy reference Gaussian outputs (.log + .fchk required!)
+cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s0.log .
+cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s0.fchk .
+cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s1.log .
+cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s1.fchk .
+```
+
+### Step 1: EVC
+
+```bash
+cat > momap_evc.inp << 'EOF'
+do_evc = 1
+
+&evc
+  ffreq(1) = "azulene-s0.log"
+  ffreq(2) = "azulene-s1.log"
+/
+EOF
+
+source /opt/MOMAP-2024A/env.sh
+# Workaround for OpenMPI 3.x -machinefile issue:
+cp $MOMAP_BIN/momap momap_patched
+sed -i 's/-machinefile/--hostfile/g' momap_patched
+python momap_patched -i momap_evc.inp
+# → Normal finish of evc calculation
+# → 18 atoms, 54 modes
+```
+
+Output: `evc.cart.dat` (94 KB), `evc.dint.dat`, `evc.out`
+
+### Step 2: Spectrum (spec_tvcf)
+
+Copy reference parameters (Ead, EDMA, EDME are molecule-specific):
+```bash
+# These must match your molecule!
+# Ead  = adiabatic excitation energy (S1_min - S0_min)
+# EDMA = absorption transition dipole moment (vertical S0→S1)
+# EDME = emission transition dipole moment (from S1 minimum)
+
+cp /opt/MOMAP-2024A/tests/azulene/kr/momap.inp momap_spec.inp
+
+# Fix nodefile for OpenMPI 3.x
+echo "localhost slots=4" > nodefile
+python momap_patched -i momap_spec.inp
+# → Normal finish
+```
+
+Output: `spec.tvcf.spec.dat` (19741 lines), columns: Energy(Ha), Energy(eV), Wavenumber, Wavelength(nm), FC_abs, FC_emi, FC_emi_intensity
+
+### Step 3: Plot
+
+```python
+import numpy as np
+data = np.loadtxt('spec.tvcf.spec.dat')
+wavelength = data[:, 3]   # nm
+emi = data[:, 5]          # FC_emi
+emi_norm = np.maximum(emi, 0) / np.max(np.maximum(emi, 0))
+
+import matplotlib.pyplot as plt
+mask = (wavelength > 250) & (wavelength < 800)
+plt.plot(wavelength[mask], emi_norm[mask])
+plt.xlabel('Wavelength (nm)')
+plt.ylabel('Normalized Intensity')
+plt.title('Azulene Fluorescence (MOMAP TVCF)')
+plt.gca().invert_xaxis()
+plt.savefig('azulene_spectrum.png', dpi=150)
+```
+
+---
+
+## Example 2: Extract Parameters from Your Own Gaussian Output
+
+### Find Ead
+
+```bash
+E_S0=$(grep "SCF Done" s0.log | tail -1 | awk '{print $5}')
+E_S1=$(grep "SCF Done" s1.log | tail -1 | awk '{print $5}')
+python3 -c "print(f'Ead = {float('$E_S1') - float('$E_S0'):.8f} au')"
+```
+
+### Find EDMA (vertical absorption TDM)
+
+From the S0-geometry TDDFT output (typically first "Excited State" block):
+```bash
+grep -A5 "transition electric dipole" s1.log | head -8
+# state    X        Y        Z       Dip.S.    Osc.
+#   1   0.2169   0.2932   0.0000   0.1330    0.0079  ← use Dip.S. (au)
+# EDMA = Dip.S. × 2.5417 debye/au
+```
+
+### Find EDME (emission TDM from S1 minimum)
+
+From the LAST "Excited State" block in the S1 optimization log:
+```bash
+tac s1.log | grep -A5 "transition electric dipole" -m1
+# Use Dip.S. × 2.5417
+```
+
+---
+
+## Example 3: TADF Molecule ISC Workflow
+
+For a TADF candidate from green_100k or blue_10k screening:
+
+```bash
+WORKDIR=~/momap_tadf/mol_07566
+mkdir -p $WORKDIR && cd $WORKDIR
+
+# 1. Run Gaussian (or use existing .log from Stage 3)
+# S0 opt+freq: already done → s0.log + s0.chk
+# T1 opt+freq: already done → t1.log + t1.chk
+# S1 TDDFT:     needed      → s1.log + s1.chk
+
+# 2. Convert chk → fchk
+formchk s0.chk s0.fchk
+formchk t1.chk t1.fchk
+formchk s1.chk s1.fchk
+
+# 3. EVC for S1→S0 (fluorescence)
+cat > momap_evc_s1.inp << 'EOF'
+do_evc = 1
+&evc
+  ffreq(1) = "s0.log"
+  ffreq(2) = "s1.log"
+/
+EOF
+source /opt/MOMAP-2024A/env.sh
+python momap_patched -i momap_evc_s1.inp
+
+# 4. ISC rate (S1 → T1)
+cat > momap_isc.inp << 'EOF'
+do_isc = 1
+&isc
+  ffreq(1) = "s1.log"
+  ffreq(2) = "t1.log"
+  Temp     = 300 K
+/
+EOF
+python momap_patched -i momap_isc.inp
+
+# 5. Spectrum
+cat > momap_spec.inp << 'EOF'
+do_spec_tvcf_ft   = 1
+do_spec_tvcf_spec = 1
+&spec_tvcf
+  DUSHIN  = .t.
+  Temp    = 300 K
+  tmax    = 5000 fs
+  dt      = 0.001 fs
+  Ead     = 0.075 au     ← REPLACE with actual value
+  EDMA    = 0.93 debye   ← REPLACE
+  EDME    = 0.65 debye   ← REPLACE
+  DSFile  = "evc.cart.dat"
+  Emax    = 0.3 au
+  dE      = 0.00001 au
+  FoSFile = "spec.tvcf.spec.dat"
+/
+EOF
+echo "localhost slots=4" > nodefile
+python momap_patched -i momap_spec.inp
+```
+
+---
+
+## Example 4: MPI Workaround Summary
+
+The `-machinefile` issue affects all MPI-based calculations (spec_tvcf, ISC, IC).
+
+**Permanent fix** (do once per MOMAP session):
+```bash
+# Create patched momap
+source /opt/MOMAP-2024A/env.sh
+cp $MOMAP_BIN/momap ~/bin/momap_patched
+sed -i 's/-machinefile/--hostfile/g' ~/bin/momap_patched
+
+# Create proper hostfile
+echo "localhost slots=4" > ~/nodefile
+cp ~/nodefile .  # copy to each working directory
+```
+
+**Or submit via Slurm to avoid MPI issues:**
+```bash
+#!/bin/bash
+#SBATCH --job-name=momap_spec
+#SBATCH --partition=X32Cv4
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
+#SBATCH --time=12:00:00
+
+source /opt/MOMAP-2024A/env.sh
+export OMPI_MCA_rmaps_base_oversubscribe=1
+mpirun --hostfile nodefile -np 4 $MOMAP_BIN/TVCORF_SPEC_para.exe momap.inp
+```
+
+Note: The Slurm cluster's MPI setup may differ. Test serial `TVCORF_SPEC.exe` first.
+
+---
+
+## Available Test Cases
+
+```bash
+ls /opt/MOMAP-2024A/tests/
+# azulene/     — C₁₀H₈, 18 atoms, all job types (gaussian, orca, qchem, turbomole, bdf)
+# Irppy3/      — Ir complex, ISC/phos (gaussian, dalton)
+# porphine/    — C₂₀H₁₄N₄, large molecule (gaussian, gaussian_g16, evc_g16)
+# transport/   — naphthalene charge transport
+# numfreq/     — numerical frequency examples
+```
+
+Each test has subdirectories for different job types: `evc/`, `kr/` (radiative rate = spectrum), `kic/`, `kisc/`, `sumstat/`.
