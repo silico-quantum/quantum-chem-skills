@@ -1,42 +1,17 @@
 # Molecular Sampler
 
-🧪 **从 Gaussian ONIOM 或 XYZ 文件中采样分子结构**
+Molecular Sampler extracts connected molecular fragments from Gaussian ONIOM GJF or XYZ geometries. It writes every detected monomer and generates deterministic nearest-neighbor dimers, trimers, tetramers, and pentamers.
 
-## 快速开始
+## Quick Start
+
+From this directory, run:
 
 ```bash
-python3 /Users/molbot/.openclaw/skills/molecular-sampler/molecular_sampler.py <input_file> [options]
+python3 molecular_sampler.py <input_file> [options]
 ```
 
-## 功能
+For example:
 
-1. **单体提取**：识别并保存所有独立分子（63 个 L 层分子）
-2. **多聚体采样**：基于距离排序，选择最近的相邻分子
-   - 二聚体 (dimers): 2 个最近分子
-   - 三聚体 (trimers): 3 个最近分子
-   - 四聚体 (tetramers): 4 个最近分子
-   - 五聚体 (pentamers): 5 个最近分子
-
-## 采样标准（v1.0.0）
-
-### 分子识别
-- **算法**: Union-Find 连通分量检测
-- **键检测**: 基于共价半径 (1.3× tolerance)
-- **最小分子**: 5 个原子
-
-### 多聚体采样
-- **策略**: 距离排序的最近邻居
-- **样本数**: 每种类型 20 个
-- **多样性**: 从前 20 个不同分子开始采样
-
-### 输出格式
-- **文件格式**: 标准 XYZ
-- **命名**: `{type}_{number:02d}.xyz`
-- **注释**: 包含分子数和原子数信息
-
-## 使用示例
-
-### 示例 1: 采样 L 层分子
 ```bash
 python3 molecular_sampler.py guest_monomer.gjf \
   --layer L \
@@ -44,57 +19,72 @@ python3 molecular_sampler.py guest_monomer.gjf \
   --output-dir ./molecular_samples
 ```
 
-### 示例 2: 采样所有层
-```bash
-python3 molecular_sampler.py structure.xyz \
-  --layer all \
-  --samples 30
-```
+## Options
 
-## 输出结构
+- `input_file`: Gaussian GJF or standard XYZ input.
+- `--output-dir`: output directory; default: `./molecular_samples`.
+- `--samples`: maximum number of starting molecules sampled for each complex size; default: `20`.
+- `--layer`: `H`, `L`, or `all`; default: `L`. XYZ atoms are assigned to the `L` layer.
 
-```
+## Method
+
+### Fragment Detection
+
+- Infers bonds from tabulated covalent radii with a `1.3 × (r1 + r2)` cutoff.
+- Uses Union-Find connected components to identify molecules.
+- Excludes connected components with fewer than five atoms.
+- Uses each molecule's coordinate centroid for neighbor-distance calculations.
+
+### Complex Sampling
+
+- Sorts molecules deterministically by centroid coordinates.
+- Sorts each molecule's neighbors by centroid distance.
+- Combines a starting molecule with its nearest neighbors to form each requested complex size.
+- Uses up to the first `--samples` starting molecules for dimers through pentamers.
+
+The sampler is deterministic and distance-based. It does not perform random sampling, enforce structural diversity, or account for periodic boundary conditions.
+
+## Output
+
+```text
 molecular_samples/
-├── monomers/           # 所有单体 (63 个)
+├── monomers/
 │   ├── monomer_01.xyz
 │   ├── monomer_02.xyz
 │   └── ...
-├── dimers/             # 二聚体 (20 个)
-├── trimers/            # 三聚体 (20 个)
-├── tetramers/          # 四聚体 (20 个)
-├── pentamers/          # 五聚体 (20 个)
+├── dimers/
+├── trimers/
+├── tetramers/
+├── pentamers/
 └── sampling_summary.txt
 ```
 
-## 距离统计（示例）
+Every generated structure uses standard XYZ format. The summary records the input path, selected layer, detected-molecule count, and number of files generated for each sample type.
 
-- **最小距离**: 6.28 Å
-- **最大距离**: 50.81 Å
-- **平均距离**: 25.97 Å
-- **中位数距离**: 25.95 Å
+## Dependencies
 
-## 依赖
-
-- Python 3.7+
+- Python 3.7 or later
 - NumPy
-- 标准库: `re`, `collections`, `os`, `argparse`
 
-## 工作流程
+Install NumPy in your chosen environment, then run the script directly:
 
-1. 解析 GJF/XYZ 文件
-2. 识别独立分子（化学键检测）
-3. 计算分子中心点距离
-4. 按距离排序邻居
-5. 采样多聚体
-6. 生成 XYZ 文件
+```bash
+python3 -m pip install numpy
+python3 molecular_sampler.py structure.xyz --layer all
+```
 
-## 创建日期
+## Limitations
 
-2026-03-03 - 为 Yuan Jiao 的分子采样工作创建
+- The built-in covalent-radius table covers `H`, `C`, `N`, `O`, `S`, `P`, `F`, `Cl`, `Br`, and `I`; other elements use a fallback radius.
+- Fragments with fewer than five atoms are omitted.
+- Bond detection evaluates every atom pair and can be slow for large systems.
+- The GJF parser supports only the geometry layouts recognized by the bundled implementation.
+- Charge, multiplicity, bonding, and chemical validity must be checked before downstream quantum-chemistry calculations.
 
-## 版本历史
+## Example
 
-- **v1.0.0** (2026-03-03): 初始版本
-  - 完整的单体提取
-  - 距离排序的多聚体采样
-  - 标准 XYZ 输出
+See [Benzene cluster sampling](references/benzene-example.md) for a complete walkthrough.
+
+## Version History
+
+- **v1.0.0** (2026-03-03): initial release with monomer extraction, nearest-neighbor oligomer sampling, and standard XYZ output.

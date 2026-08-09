@@ -1,77 +1,70 @@
-# 🧪 TADF Emitter Screening Pipeline
+# TADF Stage 4 MOMAP Adapter
 
-> **High-throughput computational screening of Thermally Activated Delayed Fluorescence (TADF) emitters.**
+This directory contains only the Stage 4 adapter that connects prepared
+Gaussian outputs to the repository's MOMAP tooling. It does not include the
+library-generation, xTB prescreening, or Gaussian execution stages of a full
+TADF screening pipeline.
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
-[![MOMAP](https://img.shields.io/badge/MOMAP-2024A-orange.svg)](http://www.momap.cn)
+For the separately maintained end-to-end project, see
+[silico-quantum/tadf-screening](https://github.com/silico-quantum/tadf-screening).
 
-## 🚀 Four-Stage Screening Pipeline
+## Scope
 
-```
- Stage 1           Stage 2           Stage 3              Stage 4 ✨
-┌──────────┐     ┌──────────┐     ┌──────────────┐     ┌──────────────┐
-│ Library  │ →   │  xTB     │ →   │  Gaussian    │ →   │   MOMAP      │
-│ RDKit    │     │ GFN2-xTB │     │ B3LYP/6-31G* │     │  TVCF/ISC    │
-│ D-A enum │     │ sTDA pre │     │ S0/T1/S1 opt │     │  k_RISC, Φ   │
-└──────────┘     └──────────┘     └──────────────┘     └──────────────┘
-  20k→5k           5k→74             74→TBD               TBD→TOP 🏆
-```
+`stage4_momap.py` accepts S0/S1 and optional T1 Gaussian log files, delegates
+the per-molecule calculation to `../momap/tools/tadf.py`, ranks successful
+results against an emission window, and writes a Markdown report plus JSON.
+MOMAP and Gaussian are separately licensed external programs; this adapter
+does not install or validate them.
 
-### Stage 1 — Library Generation
-Stochastic Donor-Acceptor fragment assembly via RDKit/DeepChem.
-**Input:** D/A fragment pools  **→  Output:** 3D structures (XYZ/SDF)
+Each Gaussian log must have a matching `.fchk`, or a matching `.chk` that can
+be converted with `formchk`. The adapter stages the log and formatted
+checkpoint together in the molecule work directory before invoking MOMAP.
 
-### Stage 2 — xTB Pre-screening
-GFN2-xTB geometry optimization + sTDA excitation.
-**Filter:** S1 in 350–500 nm, f ≥ 0.05  **→  Output:** Shortlisted candidates
+The adjacent `../momap/tools` directory is used by default. If the adapter is
+deployed separately, set `MOMAP_TOOLS_DIR` to the directory containing
+`tadf.py`; the adapter does not assume a Codex, Claude Code, OpenClaw, or
+Copilot installation path.
 
-### Stage 3 — Gaussian TDDFT
-B3LYP/6-31G(d) S0/T1 optimization + S1 TDDFT (marcus cluster).
-**Filter:** Normal termination × 2 per molecule  **→  Output:** `.log` + `.fchk` files
-
-### Stage 4 — MOMAP Photophysics ✨
-Full photophysics via MOMAP 2024A TVCF method.
-**Computes:** EVC → fluorescence spectrum → ISC rate → quantum yield
-**Filter:** Peak emission in 450–490 nm + k_RISC > k_r
+## Usage
 
 ```bash
-# Single molecule
+# Single-molecule mode
 python stage4_momap.py --mol-id mol_07566 \
     --s0 logs/s0.log --s1 logs/s1.log --t1 logs/t1.log
 
-# Batch from CSV
-python stage4_momap.py candidates.csv --output stage4_output/
+# Run ISC only with an explicit, provenance-backed S1-T1 SOC value
+python stage4_momap.py --mol-id mol_07566 \
+    --s0 logs/s0.log --s1 logs/s1.log --t1 logs/t1.log \
+    --hso-cm1 12.5
 
-# Columns: mol_id,s0_log,s1_log,t1_log
+# Batch mode
+python stage4_momap.py candidates.csv --output stage4_output/ --target blue
+
+# CSV columns: mol_id,s0_log,s1_log,t1_log,hso_cm1
 ```
 
-**Output:**
-- `stage4_output/<mol_id>/` — MOMAP EVC, spectrum, ISC results
-- `stage4_output/stage4_report.md` — Ranked report with 🔵 blue window flags
-- `stage4_output/stage4_results.json` — Machine-readable results
+Use `--window MIN MAX` for a custom range, or `--config PATH` to read an
+emission target from an upstream workflow configuration. Run
+`python stage4_momap.py --help` for the complete local interface.
 
----
+ISC is skipped unless `hso_cm1` is supplied either on the command line or in
+the CSV row. The JSON result then records `isc.status` as `not_computed`; the
+workflow never substitutes a placeholder SOC value. Internally, Stage 4 asks
+`tadf.py` to write a dedicated `--json-output` file, so progress messages on
+stdout are not interpreted as machine-readable results.
 
-## 📈 Example: Blue TADF Discovery
+For S1, the reported total energy is the last SCF reference energy plus the
+last state-1 excitation energy. The absorption and emission transition
+dipoles are state 1 from the first and last TD dipole tables, respectively;
+their XYZ vector norm is converted from atomic units to Debye.
 
-| Candidate ID | λ_emi (nm) | ΔE_ST (eV) | f | Blue Window | Stage 3 → 4 |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| mol_07566 | 450.4 | 0.XX | 0.0938 | 🔵 YES | Stage 3 |
-| mol_06765 | 448.3 | 0.XX | 0.1104 | 🟡 near | Stage 3 |
-| mol_07825 | 362.6 | 0.XX | 0.0295 | ❌ UV | → filtered out |
+Expected outputs under the selected output directory are:
 
-*Full Stage 4 report in `stage4_report.md`*
+- per-molecule files produced by the MOMAP workflow;
+- `stage4_report.md`, unless changed with `--report`;
+- `stage4_results.json` with machine-readable results.
 
----
-
-## 🛠️ Pipeline Dependencies
-
-| Stage | Tools | Server |
-|-------|-------|--------|
-| 1 | RDKit, DeepChem | Local |
-| 2 | xTB 6.7.1 | marcus2 |
-| 3 | Gaussian 16, formchk | marcus (Slurm) |
-| 4 | MOMAP 2024A | marcus2 / Slurm |
-
----
-**Silico (硅灵)** 🔮 — AI Research Partner
+The bundled images are presentation assets only; they are not evidence that a
+calculation can be reproduced in the current environment. In particular,
+`examples/4czipn_clean.png` and `examples/4czipn_bonds.png` are byte-identical
+in this snapshot, so they must not be treated as a validated style comparison.

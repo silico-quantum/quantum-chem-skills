@@ -1,10 +1,10 @@
-# MOMAP Quick Reference (v2 — 2024A Verified)
+# MOMAP 2024A Quick Reference
 
 ## Load
 
 ```bash
-source /opt/MOMAP-2024A/env.sh           # full env
-module load momap/2024A-openmpi          # or via module
+source "${MOMAP_ENV:-/opt/MOMAP-2024A/env.sh}"  # Installation environment
+module load "${MOMAP_MODULE:-momap/2024A-openmpi}"  # Site-specific alternative
 ```
 
 ## Input Format Summary
@@ -41,7 +41,7 @@ do_spec_tvcf_spec = 1
   Temp    = 300 K
   tmax    = 5000 fs
   dt      = 0.001 fs
-  Ead     = 0.075 au      ← from S0/S1 SCF difference
+  Ead     = 0.075 au      ← E_S1,total - E_S0
   EDMA    = 0.93 debye    ← from S0→S1 vertical TDM
   EDME    = 0.65 debye    ← from S1→S0 emission TDM
   DSFile  = "evc.cart.dat"
@@ -54,12 +54,15 @@ do_spec_tvcf_spec = 1
 ## Extract from Gaussian
 
 ```bash
-# Ead
+# Ead: S1 total energy is the final SCF reference plus the final S1 excitation
 E_S0=$(grep "SCF Done" s0.log | tail -1 | awk '{print $5}')
-E_S1=$(grep "SCF Done" s1.log | tail -1 | awk '{print $5}')
-# Ead = E_S1 - E_S0
+E_S1_SCF=$(grep "SCF Done" s1.log | tail -1 | awk '{print $5}')
+E_S1_EXC_EV=$(grep "Excited State[[:space:]]*1:" s1.log | tail -1 | awk '{for (i=1;i<=NF;i++) if ($i=="eV") print $(i-1)}')
+# E_S1_total = E_S1_SCF + E_S1_EXC_EV / 27.2114
+# Ead = E_S1_total - E_S0; fail if either S1 term is unavailable
 
-# Transition dipole (au → debye: ×2.5417)
+# State-1 transition dipole: norm(X,Y,Z) × 2.541746 au→debye.
+# Use the first table for absorption and the last table for emission.
 grep -A5 "transition electric dipole" s1.log
 
 # Generate fchk
@@ -97,7 +100,7 @@ Plot column 4 vs column 6 (emission) or 4 vs 5 (absorption).
 ## Bundled Tests
 
 ```bash
-ls /opt/MOMAP-2024A/tests/
+ls "$MOMAP_ROOT/tests/"
 # azulene/  Irppy3/  porphine/  transport/  numfreq/  pysoc/
 # Each: gaussian/  kr/  kic/  kisc/  evc/  sumstat/
 ```

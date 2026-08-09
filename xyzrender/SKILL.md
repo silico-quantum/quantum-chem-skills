@@ -1,11 +1,8 @@
 ---
 name: xyzrender
-version: 1.0.0
-description: Publication-quality molecular graphics. Render molecular structures as SVG, PNG, PDF, and animated GIF from XYZ, mol/SDF, MOL2, PDB, SMILES, CIF, cube files, or quantum chemistry output.
-homepage: https://github.com/aligfellow/xyzrender
-metadata:
-  category: visualization
-  tags: [chemistry, molecular-graphics, svg, gif, xyz, quantum-chemistry, 分子可视化, molecule visualization, 渲染分子, render molecule, xyz渲染, xyz render, 分子出图, molecular graphics]
+description: Use when rendering publication-quality molecular structures or trajectories as SVG, PNG, PDF, or animated GIF from common chemistry file formats and calculation outputs.
+license: MIT
+compatibility: Requires Python and xyzrender; supported input and output formats depend on the installed xyzrender version.
 ---
 
 # xyzrender - Publication-Quality Molecular Graphics
@@ -74,3 +71,6 @@ xyzrender molecule.xyz --vdw --gif-rot -o vdw.gif
 ## Citation
 
 > A.S. Goodfellow* and B.N. Nguyen, *J. Chem. Theory Comput.*, 2026, DOI: 10.1021/acs.jctc.5c02073
+
+See the [benzene visualization example](references/benzene-visualization.md) for
+a worked rendering workflow.

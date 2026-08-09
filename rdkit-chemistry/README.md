@@ -63,7 +63,7 @@
 
 ### 📊 Molecular Descriptors
 
-```python
+```text
 Molecular formula:  C6H6
 Molecular weight:   78.11 Da
 LogP:               1.69

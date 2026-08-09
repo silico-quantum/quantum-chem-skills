@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-电荷和非共价相互作用可视化（简化版，仅使用 RDKit）
+Simplified charge and noncovalent-interaction visualization using RDKit only.
+
+This qualitative analysis does not replace rigorous ESP or RDG calculations.
 """
 
 from rdkit import Chem
@@ -8,82 +10,84 @@ from rdkit.Chem import AllChem, rdMolDescriptors
 from rdkit.Chem.Draw import rdMolDraw2D
 import numpy as np
 
-# 使用 DMAC-TRZ
+E_ANGSTROM_TO_DEBYE = 4.8032047
+
+# Use DMAC-TRZ
 SMILES = "Cc1c2c(cc3ccccc13)N(c1ccccc1)C2C1=CC=C2C=CN=C(c3ccccc3)N=C(c3ccccc3)N=C21"
 NAME = "DMAC-TRZ"
 
-print(f"=== 电荷和非共价相互作用分析: {NAME} ===\n")
+print(f"=== Charge and noncovalent-interaction analysis: {NAME} ===\n")
 
-# 构建分子
+# Build the molecule
 mol = Chem.MolFromSmiles(SMILES)
 mol_3d = Chem.AddHs(mol)
 AllChem.EmbedMolecule(mol_3d, AllChem.ETKDG())
 AllChem.MMFFOptimizeMolecule(mol_3d)
 
-# 计算电荷
+# Compute atomic charges
 AllChem.ComputeGasteigerCharges(mol_3d)
 
 def getCharge(atom):
-    """获取原子电荷"""
+    """Return the atomic charge."""
     try:
         return float(atom.GetProp('_GasteigerCharge'))
     except:
         return 0.0
 
 print("=" * 60)
-print("1. 非共价相互作用位点识别")
+print("1. Identification of potential noncovalent-interaction sites")
 print("=" * 60)
 
-# 识别可能的非共价相互作用位点
+# Identify potential noncovalent-interaction sites
 nci_sites = {
-    "氢键受体": [],
-    "氢键供体": [],
-    "π体系": [],
-    "孤对电子": []
+    "H-bond acceptors": [],
+    "H-bond donors": [],
+    "pi systems": [],
+    "lone pairs": []
 }
 
-# 分析原子
-for atom in mol.GetAtoms():
+# Analyze the explicit-hydrogen molecule on which the charges were computed.
+for atom in mol_3d.GetAtoms():
     idx = atom.GetIdx()
     symbol = atom.GetSymbol()
     charge = getCharge(atom)
     
-    # 氢键受体 (电负性原子，负电荷)
+    # H-bond acceptors (electronegative atoms with negative charge)
     if symbol in ['N', 'O', 'F'] and charge < -0.05:
-        nci_sites["氢键受体"].append((idx, symbol, charge))
+        nci_sites["H-bond acceptors"].append((idx, symbol, charge))
     
-    # 氢键供体 (连接 H 的 N, O)
+    # H-bond donors (N or O bonded to H)
     if symbol in ['N', 'O'] and any(neighbor.GetSymbol() == 'H' for neighbor in atom.GetNeighbors()):
-        nci_sites["氢键供体"].append((idx, symbol, charge))
+        nci_sites["H-bond donors"].append((idx, symbol, charge))
     
-    # 孤对电子 (N, O, S 的非键电子)
+    # Lone pairs (nonbonding electrons on N, O, or S)
     if symbol in ['N', 'O', 'S']:
-        nci_sites["孤对电子"].append((idx, symbol, charge))
+        nci_sites["lone pairs"].append((idx, symbol, charge))
     
-    # π体系 (芳香碳)
+    # Pi systems (aromatic atoms)
     if atom.GetIsAromatic():
-        nci_sites["π体系"].append((idx, symbol, charge))
+        nci_sites["pi systems"].append((idx, symbol, charge))
 
-# 打印结果
+# Print results
 for site_type, sites in nci_sites.items():
     if sites:
         print(f"\n{site_type}:")
-        for idx, symbol, charge in sites[:8]:  # 显示前8个
-            print(f"  {symbol} (idx {idx}): 电荷 {charge:.3f}")
+        for idx, symbol, charge in sites[:8]:  # Show the first eight
+            print(f"  {symbol} (idx {idx}): charge {charge:.3f}")
         if len(sites) > 8:
-            print(f"  ... 共 {len(sites)} 个")
+            print(f"  ... {len(sites)} total")
 
 print("\n" + "=" * 60)
-print("2. π-π 堆积倾向分析")
+print("2. Pi-pi stacking-propensity analysis")
 print("=" * 60)
 
-# 计算芳香环的几何特征
+# Compute geometric features of aromatic rings
 ring_info = mol_3d.GetRingInfo()
 aromatic_rings = [ring for ring in ring_info.AtomRings() if all(mol_3d.GetAtomWithIdx(i).GetIsAromatic() for i in ring)]
 
-print(f"芳香环数量: {len(aromatic_rings)}")
+print(f"Number of aromatic rings: {len(aromatic_rings)}")
 
-# 计算每个环的中心和法向量
+# Compute each ring's center and normal vector
 conf = mol_3d.GetConformer()
 ring_centers = []
 ring_normals = []
@@ -93,7 +97,7 @@ for ring in aromatic_rings:
     center = coords.mean(axis=0)
     ring_centers.append(center)
     
-    # 计算法向量（使用前3个原子）
+    # Compute the normal vector from the first three atoms
     if len(ring) >= 3:
         v1 = coords[1] - coords[0]
         v2 = coords[2] - coords[0]
@@ -101,100 +105,101 @@ for ring in aromatic_rings:
         normal = normal / np.linalg.norm(normal)
         ring_normals.append(normal)
 
-# 分析环之间的夹角（π-π 堆积倾向）
-print("\n芳香环相对取向:")
+# Analyze inter-ring angles as a proxy for pi-pi stacking propensity
+print("\nRelative orientations of aromatic rings:")
 for i in range(len(ring_normals)):
     for j in range(i+1, len(ring_normals)):
-        angle = np.degrees(np.arccos(np.abs(np.dot(ring_normals[i], ring_normals[j]))))
+        cosine = np.clip(np.abs(np.dot(ring_normals[i], ring_normals[j])), 0.0, 1.0)
+        angle = np.degrees(np.arccos(cosine))
         distance = np.linalg.norm(ring_centers[i] - ring_centers[j])
         
-        if distance < 6.0:  # 6 Å 以内的环
-            print(f"  环 {i} - 环 {j}: 夹角 {angle:.1f}°, 距离 {distance:.2f} Å")
-            if angle > 160 or angle < 20:
-                print(f"    → 可能的 π-π 堆积!")
+        if distance < 6.0:  # Rings within 6 Å
+            print(f"  Ring {i} - ring {j}: angle {angle:.1f}°, distance {distance:.2f} Å")
+            if angle < 20:
+                print(f"    → Possible pi-pi stacking")
 
 print("\n" + "=" * 60)
-print("3. 静电势表面可视化 (原子电荷着色)")
+print("3. Electrostatic-potential proxy (atomic-charge coloring)")
 print("=" * 60)
 
-# 生成原子颜色映射（基于电荷）
+# Generate an atom-color map based on charge
 charges = [getCharge(atom) for atom in mol_3d.GetAtoms()]
 charge_min, charge_max = min(charges), max(charges)
 
-print(f"电荷范围: [{charge_min:.3f}, {charge_max:.3f}]")
-print("颜色映射: 红色(负) → 白色(中性) → 蓝色(正)")
+print(f"Charge range: [{charge_min:.3f}, {charge_max:.3f}]")
+print("Color map: red (negative) → white (neutral) → blue (positive)")
 
-# 创建原子颜色
+# Create atom colors
 atom_colors = {}
 for i, atom in enumerate(mol_3d.GetAtoms()):
     charge = charges[i]
-    # 归一化到 [0, 1]
+    # Normalize to [0, 1]
     if charge_max != charge_min:
         norm_charge = (charge - charge_min) / (charge_max - charge_min)
     else:
         norm_charge = 0.5
     
-    # RGB: 红(负) -> 白(中性) -> 蓝(正)
+    # RGB: red (negative) -> white (neutral) -> blue (positive)
     if norm_charge < 0.5:
-        # 负电荷：红色
+        # Negative charge: red
         r = 1.0
         g = norm_charge * 2
         b = norm_charge * 2
     else:
-        # 正电荷：蓝色
+        # Positive charge: blue
         r = (1 - norm_charge) * 2
         g = (1 - norm_charge) * 2
         b = 1.0
     
     atom_colors[i] = (r, g, b, 1.0)
 
-# 生成可视化
+# Generate the visualization
 drawer = rdMolDraw2D.MolDraw2DCairo(1000, 800)
 drawer.SetFontSize(0.9)
 drawer.DrawMolecule(mol_3d, highlightAtoms=list(atom_colors.keys()), highlightAtomColors=atom_colors)
 drawer.FinishDrawing()
 drawer.WriteDrawingText(f"{NAME}_charge_surface.png")
-print(f"✓ 保存: {NAME}_charge_surface.png")
+print(f"✓ Saved: {NAME}_charge_surface.png")
 
 print("\n" + "=" * 60)
-print("4. 非共价相互作用位点可视化")
+print("4. Noncovalent-interaction-site visualization")
 print("=" * 60)
 
-# 标记关键位点
-hb_acceptors = [site[0] for site in nci_sites["氢键受体"]]
+# Mark key sites
+hb_acceptors = [site[0] for site in nci_sites["H-bond acceptors"]]
 pi_centers = []
 
-# 选择芳香环中心原子
+# Select a representative atom from each aromatic ring
 for i, ring in enumerate(aromatic_rings):
     if len(ring) > 0:
-        # 选择环的中心原子
+        # Select the ring's representative atom
         center_atom = ring[len(ring)//2]
         pi_centers.append(center_atom)
 
-# 红色标记氢键受体，蓝色标记π体系
+# Mark H-bond acceptors in red and pi-system representatives in blue
 atom_colors2 = {}
 for idx in hb_acceptors:
-    atom_colors2[idx] = (1.0, 0.2, 0.2, 0.8)  # 红色
+    atom_colors2[idx] = (1.0, 0.2, 0.2, 0.8)  # Red
 
 for idx in pi_centers:
     if idx not in atom_colors2:
-        atom_colors2[idx] = (0.2, 0.4, 1.0, 0.8)  # 蓝色
+        atom_colors2[idx] = (0.2, 0.4, 1.0, 0.8)  # Blue
 
-# 生成可视化
+# Generate the visualization
 drawer2 = rdMolDraw2D.MolDraw2DCairo(1000, 800)
 drawer2.SetFontSize(0.9)
 drawer2.DrawMolecule(mol_3d, highlightAtoms=list(atom_colors2.keys()), highlightAtomColors=atom_colors2)
 drawer2.FinishDrawing()
 drawer2.WriteDrawingText(f"{NAME}_nci_sites.png")
-print(f"✓ 保存: {NAME}_nci_sites.png")
-print(f"  红色: 氢键受体 ({len(hb_acceptors)} 个)")
-print(f"  蓝色: π体系中心 ({len(pi_centers)} 个)")
+print(f"✓ Saved: {NAME}_nci_sites.png")
+print(f"  Red: H-bond acceptors ({len(hb_acceptors)})")
+print(f"  Blue: pi-system representatives ({len(pi_centers)})")
 
 print("\n" + "=" * 60)
-print("5. 分子堆积倾向预测")
+print("5. Molecular packing-propensity estimate")
 print("=" * 60)
 
-# 计算分子形状因子
+# Compute molecular shape factors
 coords_3d = np.array([list(conf.GetAtomPosition(i)) for i in range(mol_3d.GetNumAtoms())])
 cov_matrix = np.cov((coords_3d - coords_3d.mean(axis=0)).T)
 eigenvalues = np.real(np.sort(np.linalg.eigvals(cov_matrix))[::-1])
@@ -202,37 +207,37 @@ eigenvalues = np.real(np.sort(np.linalg.eigvals(cov_matrix))[::-1])
 L1, L2, L3 = np.sqrt(eigenvalues)
 aspect_ratios = (L1/L3, L2/L3)
 
-print(f"分子形状因子:")
-print(f"  长宽比 (L1/L3): {aspect_ratios[0]:.2f}")
-print(f"  宽厚比 (L2/L3): {aspect_ratios[1]:.2f}")
+print(f"Molecular shape factors:")
+print(f"  Length-to-width ratio (L1/L3): {aspect_ratios[0]:.2f}")
+print(f"  Width-to-thickness ratio (L2/L3): {aspect_ratios[1]:.2f}")
 
 if aspect_ratios[0] > 2 and aspect_ratios[1] > 1.5:
-    print(f"  → 扁平形状，有利于面-面堆积")
+    print(f"  → Flat shape; may favor face-to-face packing")
 elif aspect_ratios[0] > 3:
-    print(f"  → 长条形状，可能形成边-面堆积")
+    print(f"  → Elongated shape; may favor edge-to-face packing")
 else:
-    print(f"  → 较为球形，堆积倾向较弱")
+    print(f"  → Relatively spherical shape; weaker directional packing propensity")
 
-# 计算偶极矩（近似）
-print(f"\n偶极矩估算:")
+# Estimate the dipole moment
+print(f"\nDipole-moment estimate:")
 dipole = np.zeros(3)
 for i, atom in enumerate(mol_3d.GetAtoms()):
     charge = getCharge(atom)
     pos = np.array(list(conf.GetAtomPosition(i)))
     dipole += charge * pos
 
-dipole_magnitude = np.linalg.norm(dipole)
-print(f"  |μ| ≈ {dipole_magnitude:.2f} Debye (Gasteiger 电荷估算)")
+dipole_magnitude = np.linalg.norm(dipole) * E_ANGSTROM_TO_DEBYE
+print(f"  |μ| ≈ {dipole_magnitude:.2f} Debye (estimated from Gasteiger charges)")
 if dipole_magnitude > 3:
-    print(f"  → 较大偶极矩，可能影响固态堆积")
+    print(f"  → A relatively large dipole moment may affect solid-state packing")
 
 print("\n" + "=" * 60)
-print("✅ 完成！")
+print("✅ Complete")
 print("=" * 60)
-print(f"生成的可视化:")
-print(f"  - {NAME}_charge_surface.png (原子电荷着色)")
-print(f"  - {NAME}_nci_sites.png (非共价相互作用位点)")
-print("\n建议: 使用 Gaussian + Multiwfn 进行精确的 ESP 和 RDG 分析")
+print(f"Generated visualizations:")
+print(f"  - {NAME}_charge_surface.png (atomic-charge coloring)")
+print(f"  - {NAME}_nci_sites.png (potential noncovalent-interaction sites)")
+print("\nLimitation: this simplified RDKit analysis does not replace rigorous ESP or RDG calculations; use Gaussian and Multiwfn for quantitative analysis.")
 print("  Gaussian: #P B3LYP/6-31G* SCF=Tight")
-print("  Multiwfn: 功能 5 (ESP), 功能 20 (RDG)")
+print("  Multiwfn: function 5 (ESP), function 20 (RDG)")
 print("=" * 60)

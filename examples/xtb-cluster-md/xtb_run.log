@@ -7,7 +7,7 @@
      |                    University of Bonn                     |     
       -----------------------------------------------------------      
 
-   * xtb version 6.7.1 (unknown) compiled by 'runner@Mac-1732184002186.local' on 2024-11-21
+   * xtb version 6.7.1 (unknown) compiled by '[redacted-build-host]' on 2024-11-21
 
    xtb is free software: you can redistribute it and/or modify it under
    the terms of the GNU Lesser General Public License as published by
@@ -366,4 +366,3 @@ normal termination of xtb
  * wall-time:     0 d,  0 h,  0 min,  3.430 sec
  *  cpu-time:     0 d,  0 h,  0 min,  7.192 sec
  * ratio c/w:     2.097 speedup
-

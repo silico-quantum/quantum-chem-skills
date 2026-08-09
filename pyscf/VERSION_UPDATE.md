@@ -1,69 +1,55 @@
-# PySCF 版本更新信息
+# PySCF Version Notes
 
-## 最新版本
-- **版本**: 2.12.1
-- **发布日期**: 2026-01-27
-- **官方仓库**: https://github.com/pyscf/pyscf
-- **文档**: http://www.pyscf.org
+## Release Snapshot
 
-## 安装更新
+As checked on 2026-08-09, the latest stable release published on PyPI is
+**PySCF 2.14.0**, uploaded on 2026-07-18. Treat this as a dated snapshot rather
+than a permanently current version claim.
+
+- [PySCF on PyPI](https://pypi.org/project/pyscf/)
+- [Official repository](https://github.com/pyscf/pyscf)
+- [Official releases](https://github.com/pyscf/pyscf/releases)
+- [Official documentation](https://pyscf.org/)
+- [Upstream changelog](https://github.com/pyscf/pyscf/blob/master/CHANGELOG)
+
+## Install or Update
 
 ```bash
-# 最新稳定版
-pip install --upgrade pyscf
+# Latest stable release available to the selected package index
+python -m pip install --upgrade pyscf
 
-# 开发版新功能
-pip install pyscf-forge
+# Optional package containing additional and newer features
+python -m pip install pyscf-forge
 
-# 所有扩展
-pip install pyscf[all]
+# Install the extension set exposed by the current PyPI release
+python -m pip install 'pyscf[all]'
 ```
 
-## 新增功能（v2.12.x）
+Verify the environment actually selected by the shell:
 
-### 1. GW/RPA 方法
-```python
-from pyscf import gw, rpa
-
-# G0W0 近似
-gw_calc = gw.G0W0(mf, freq_int='ac')
-gw_result = gw_calc.kernel()
-
-# 直接 RPA
-rpa_calc = rpa.dRPA(mf)
-rpa_result = rpa_calc.kernel()
+```bash
+python -c "import platform, pyscf; print(platform.python_version(), pyscf.__version__)"
 ```
 
-### 2. MC-PDFT（多组态对密度泛函理论）
-```python
-from pyscf import mcpdft
+## Reproducible Environments
 
-# MC-PDFT 计算
-cas = mcscf.CASSCF(mf, 6, 8)
-pdft = mcpdft.MCPDFT(cas, 'tpbe')
-energy = pdft.kernel()
+For a reproducible workflow, pin the tested release rather than relying on the
+moving latest version:
+
+```bash
+python -m pip install 'pyscf==2.14.0'
 ```
 
-### 3. ADC（代数图解构造）
-```python
-from pyscf import adc
+Record at least the PySCF version, Python version, operating system and
+architecture, numerical backend, thread settings, optional extensions, and
+the exact calculation input. Repository examples may describe an older
+environment and are not automatically evidence of compatibility with a newer
+release.
 
-# ADC(2) 激发态
-adc_calc = adc.ADC(mf)
-adc_calc.nstates = 5
-adc_calc.kernel()
-```
+## Compatibility
 
-### 4. 性能改进
-
-1. **密度拟合优化**：大体系内存占用减少 30%
-2. **MPI 并行**：支持 >30000 基函数的计算
-3. **积分缓存**：改进的磁盘/内存管理
-4. **JAX 集成**：更好的自动微分支持
-
-## 兼容性
-
-- Python 3.8-3.12
-- NumPy 1.20+
-- SciPy 1.6+
-- JAX 0.4+（可选）
+The PyPI metadata for 2.14.0 requires Python 3.7 or newer and lists Python
+classifiers through 3.14. Wheel availability is platform- and
+architecture-dependent. Check the selected release's metadata and the
+upstream installation guide before choosing Python, NumPy, SciPy, JAX, GPU, or
+extension versions for a production calculation.

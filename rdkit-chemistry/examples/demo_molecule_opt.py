@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-RDKit 分子优化和可视化演示
+RDKit molecular optimization and visualization demonstration.
 """
 
 from rdkit import Chem
@@ -8,101 +8,101 @@ from rdkit.Chem import AllChem
 import subprocess
 import os
 
-# 选择一个典型的 TADF 分子: DMAC-TRZ (给体: DMAC, 受体: TRZ)
+# Use the representative TADF molecule DMAC-TRZ (DMAC donor and TRZ acceptor).
 SMILES = "Cc1c2c(cc3ccccc13)N(c1ccccc1)C2C1=CC=C2C=CN=C(c3ccccc3)N=C(c3ccccc3)N=C21"
 NAME = "DMAC-TRZ"
 
-print(f"=== 分子优化演示: {NAME} ===\n")
+print(f"=== Molecular optimization demonstration: {NAME} ===\n")
 
-# Step 1: 从 SMILES 构建 3D 分子
-print("Step 1: 从 SMILES 构建 3D 构象...")
+# Step 1: Build a molecule from SMILES.
+print("Step 1: Build a 3D conformer from SMILES...")
 mol = Chem.MolFromSmiles(SMILES)
 if mol is None:
-    print("❌ SMILES 解析失败")
+    print("❌ Failed to parse SMILES")
     exit(1)
 
 mol = Chem.AddHs(mol)
-print(f"✓ 分子构建完成: {mol.GetNumAtoms()} 原子")
+print(f"✓ Molecule built: {mol.GetNumAtoms()} atoms")
 
-# Step 2: 生成 3D 坐标
-print("\nStep 2: 生成 3D 坐标...")
+# Step 2: Generate 3D coordinates.
+print("\nStep 2: Generate 3D coordinates...")
 res = AllChem.EmbedMolecule(mol, AllChem.ETKDG())
 if res == -1:
-    print("⚠️  默认嵌入失败，尝试随机坐标...")
+    print("⚠️  Default embedding failed; trying random coordinates...")
     res = AllChem.EmbedMolecule(mol, AllChem.ETKDG(), useRandomCoords=True)
 
 if res == -1:
-    print("❌ 3D 坐标生成失败")
+    print("❌ Failed to generate 3D coordinates")
     exit(1)
-print("✓ 3D 坐标生成成功")
+print("✓ Generated 3D coordinates")
 
-# Step 3: MMFF94 力场优化
-print("\nStep 3: MMFF94 力场优化...")
+# Step 3: Optimize with the MMFF94 force field.
+print("\nStep 3: MMFF94 force-field optimization...")
 try:
-    # 构建力场
+    # Construct the force field.
     mmff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol))
     if mmff is None:
-        raise Exception("MMFF 力场初始化失败")
+        raise Exception("Failed to initialize the MMFF force field")
 
-    # 优化
+    # Optimize the geometry.
     initial_energy = mmff.CalcEnergy()
-    print(f"  初始能量: {initial_energy:.2f} kcal/mol")
+    print(f"  Initial energy: {initial_energy:.2f} kcal/mol")
 
     converged = AllChem.MMFFOptimizeMolecule(mol, maxIters=500)
 
     if converged == 0:
         final_energy = mmff.CalcEnergy()
-        print(f"  最终能量: {final_energy:.2f} kcal/mol")
-        print(f"  能量降低: {initial_energy - final_energy:.2f} kcal/mol")
-        print("✓ MMFF 优化收敛")
+        print(f"  Final energy: {final_energy:.2f} kcal/mol")
+        print(f"  Energy decrease: {initial_energy - final_energy:.2f} kcal/mol")
+        print("✓ MMFF optimization converged")
     else:
-        print("⚠️  MMFF 优化未完全收敛")
+        print("⚠️  MMFF optimization did not fully converge")
 
 except Exception as e:
-    print(f"⚠️  MMFF 失败: {e}")
-    print("  尝试 UFF 力场...")
+    print(f"⚠️  MMFF failed: {e}")
+    print("  Trying the UFF force field...")
     try:
         AllChem.UFFOptimizeMolecule(mol)
-        print("✓ UFF 优化完成")
+        print("✓ UFF optimization completed")
     except Exception as e2:
-        print(f"❌ UFF 也失败: {e2}")
+        print(f"❌ UFF also failed: {e2}")
         exit(1)
 
-# Step 4: 导出 XYZ 和 SDF 文件
-print("\nStep 4: 导出文件...")
+# Step 4: Export XYZ and SDF files.
+print("\nStep 4: Export files...")
 xyz_file = f"{NAME}.xyz"
 sdf_file = f"{NAME}.sdf"
 
-# XYZ 文件
+# XYZ file.
 Chem.MolToXYZFile(mol, xyz_file)
-print(f"✓ 已保存: {xyz_file}")
+print(f"✓ Saved: {xyz_file}")
 
-# SDF 文件（包含键信息）
+# SDF file, including bond information.
 writer = Chem.SDWriter(sdf_file)
 writer.write(mol)
 writer.close()
-print(f"✓ 已保存: {sdf_file}")
+print(f"✓ Saved: {sdf_file}")
 
-# 读取 XYZ 文件用于后续渲染
+# Read the XYZ file for the preview used before rendering.
 with open(xyz_file, 'r') as f:
     xyz_content = f.read()
-    print(f"\nXYZ 文件内容预览:")
+    print("\nXYZ file preview:")
     print("```")
     lines = xyz_content.split('\n')
-    print(lines[0])  # 原子数
-    print(lines[1])  # 注释
+    print(lines[0])  # Atom count.
+    print(lines[1])  # Comment line.
     for i in range(2, min(7, len(lines))):
         print(lines[i])
     if len(lines) > 7:
         print("...")
     print("```")
 
-# Step 5: 使用 xyzrender 渲染
-print("\nStep 5: xyzrender 渲染...")
+# Step 5: Render with xyzrender.
+print("\nStep 5: Render with xyzrender...")
 png_file = f"{NAME}.png"
 
 try:
-    # 使用 SDF 文件渲染（保留键信息）
+    # Render the SDF file to retain bond information.
     result = subprocess.run(
         ['xyzrender', sdf_file, '-o', png_file, '--transparent', '--bo'],
         capture_output=True,
@@ -112,24 +112,24 @@ try:
 
     if result.returncode == 0 and os.path.exists(png_file):
         file_size = os.path.getsize(png_file)
-        print(f"✓ 渲染成功: {png_file} ({file_size} bytes)")
+        print(f"✓ Rendering succeeded: {png_file} ({file_size} bytes)")
     else:
-        print(f"❌ 渲染失败:")
+        print("❌ Rendering failed:")
         print(result.stderr)
         exit(1)
 
 except FileNotFoundError:
-    print("❌ xyzrender 未安装")
-    print("  安装: pip install xyzrender")
+    print("❌ xyzrender is not installed")
+    print("  Install with: pip install xyzrender")
     exit(1)
 except Exception as e:
-    print(f"❌ 渲染错误: {e}")
+    print(f"❌ Rendering error: {e}")
     exit(1)
 
 print("\n" + "="*50)
-print("✅ 完成！")
-print(f"   分子: {NAME}")
-print(f"   原子数: {mol.GetNumAtoms()}")
+print("✅ Complete!")
+print(f"   Molecule: {NAME}")
+print(f"   Atoms: {mol.GetNumAtoms()}")
 print(f"   XYZ: {xyz_file}")
 print(f"   PNG: {png_file}")
 print("="*50)

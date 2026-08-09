@@ -77,7 +77,7 @@ def run_scf(xyz_file, method='RHF', basis='cc-pvdz',
     mf.run()
     
     # Summary
-    n electrons = int(mol.nelectron)
+    n_electrons = int(mol.nelectron)
     n_bf = mol.nao
     mo_e = mf.mo_energy * 27.2114  # eV
     

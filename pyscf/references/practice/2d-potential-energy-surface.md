@@ -1,80 +1,95 @@
-# 二维势能面扫描 (2D Potential Energy Surface)
+# Two-Dimensional Potential Energy Surface Scan
 
-## 概述
+## Overview
 
-二维势能面（2D PES）扫描是研究分子几何结构-能量关系的重要方法，特别适用于：
-- 基态和激发态的平衡构型对比
-- 几何弛豫效应分析
-- Stokes 位移的物理起源
-- 化学反应路径探索
+A two-dimensional potential-energy-surface (2D PES) scan samples the
+relationship between selected molecular coordinates and electronic energy. A
+constrained scan can help with:
 
-## 理论背景
+- Comparing ground- and excited-state energy trends over selected coordinates
+- Analyzing geometric relaxation effects
+- Investigating the physical origin of a Stokes shift
+- Exploring chemical reaction pathways
 
-### 势能面 (PES)
-势能面描述分子能量 E 作为原子核坐标 {R} 的函数：
-```
+## Theoretical Background
+
+### Potential Energy Surface (PES)
+
+A potential energy surface describes the molecular energy, E, as a function of the nuclear coordinates, {R}:
+
+```text
 E = E(R₁, R₂, ..., R₃N)
 ```
 
-对于 N 原子分子，PES 是 3N-6 维（非线性）或 3N-5 维（线性）的超曲面。
+For a molecule containing N atoms, the PES is a 3N-6-dimensional hypersurface for a nonlinear molecule or a 3N-5-dimensional hypersurface for a linear molecule.
 
-### 二维扫描
-固定两个关键坐标（如键长 r₁, r₂），计算能量：
+### Two-Dimensional Scan
+
+Fix two key coordinates, such as bond lengths r₁ and r₂, and calculate the energy:
+
+```text
+E(r₁, r₂) = E(r₁, r₂, all other coordinates fixed)
 ```
-E(r₁, r₂) = E(r₁, r₂, 其他坐标固定)
-```
 
-## 网格设计策略
+## Grid-Design Strategy
 
-### 1. 范围选择
+### 1. Selecting the Range
 
-**原则**：必须包含基态和激发态的平衡构型
+**Principle**: Start from physically plausible structures and choose a range
+that brackets the region of interest. A pilot scan can identify whether the
+range needs to be extended.
 
-**示例（苯分子）**：
+**Example (benzene)**:
+
 ```python
-# 基态平衡: C-C ≈ 1.40 Å, C-H ≈ 1.08 Å
-# 激发态平衡: C-C ≈ 1.80 Å, C-H ≈ 0.85 Å
-
-# 推荐范围
-cc_range = np.linspace(1.25, 1.80, 15)  # C-C 键长
-ch_range = np.linspace(0.85, 1.20, 15)  # C-H 键长
+# Illustrative ranges only; justify them for the selected method and state.
+cc_range = np.linspace(1.25, 1.80, 15)  # C-C bond length
+ch_range = np.linspace(0.85, 1.20, 15)  # C-H bond length
 ```
 
-### 2. 网格密度
+### 2. Grid Density
 
-| 密度 | 点数 | 计算时间 | 适用场景 |
-|------|------|----------|----------|
-| 粗略 | 5×5 = 25 | ~5 分钟 | 快速预览 |
-| 中等 | 7×7 = 49 | ~10 分钟 | 常规计算 |
-| 精细 | 10×10 = 100 | ~20 分钟 | 精确分析 |
-| 超精细 | 15×15 = 225 | ~40 分钟 | 发表级结果 |
+| Grid | Number of points | Typical role |
+|---|---:|---|
+| 5×5 | 25 | Pilot scan |
+| 7×7 | 49 | Refine a broad region |
+| 10×10 | 100 | Inspect a narrower region |
+| 15×15 | 225 | Higher-resolution sampling after convergence checks |
 
-### 3. 基组选择
+Runtime depends on the molecule, method, basis, state count, convergence, and
+hardware. Grid density alone does not make a result publication-ready.
 
-| 基组 | 精度 | 速度 | 适用场景 |
-|------|------|------|----------|
-| STO-3G | 低 | 快 | 快速测试 |
-| 3-21G | 中 | 中 | 常规计算 |
-| cc-pVDZ | 高 | 慢 | 精确计算 |
+### 3. Basis-Set Selection
 
-## 完整代码模板
+| Basis set | Possible role in this example |
+|---|---|
+| STO-3G | Interface or debugging test |
+| 3-21G | Low-cost exploratory scan |
+| cc-pVDZ | Larger comparison calculation |
 
-### 基础版本（7×7 网格）
+Basis-set suitability is property- and system-dependent. Converge the result
+with respect to basis and method rather than treating this ordering as a
+universal accuracy ranking.
+
+## Illustrative Code Template
+
+### Basic Version (7×7 Grid)
 
 ```python
 import numpy as np
 from pyscf import gto, dft, tdscf
 
-# 网格定义
+# Define the grid
 cc_range = np.linspace(1.25, 1.80, 7)
 ch_range = np.linspace(0.85, 1.20, 7)
 
 gs_energies = []
-s1_energies = []
+s1_total_energies = []
+excitation_energies_ev = []
 
 for cc in cc_range:
     for ch in ch_range:
-        # 构建分子
+        # Build the molecule
         atoms = []
         for i in range(6):
             angle = i * np.pi / 3
@@ -83,40 +98,52 @@ for cc in cc_range:
         
         mol = gto.M(atom='\n'.join(atoms), basis='3-21g', verbose=0)
         
-        # 基态计算
+        # Ground-state calculation
         mf = dft.RKS(mol)
         mf.xc = 'b3lyp'
         e_gs = mf.kernel()
+        if not mf.converged:
+            raise RuntimeError(f"SCF failed at C-C={cc:.4f}, C-H={ch:.4f} Å")
         
-        # 激发态计算
+        # Excited-state calculation
         td = tdscf.TDDFT(mf)
         td.nstates = 3
         td.kernel()
-        e_s1 = td.e[0] * 27.2114
+        # td.e[0] is an excitation energy in Hartree, not a total energy.
+        e_s1 = e_gs + td.e[0]
         
         gs_energies.append(e_gs)
-        s1_energies.append(e_s1)
+        s1_total_energies.append(e_s1)
+        excitation_energies_ev.append(td.e[0] * 27.211386245988)
 
-# 重塑为 2D 数组
-gs_2d = np.array(gs_energies).reshape(7, 7)
-s1_2d = np.array(s1_energies).reshape(7, 7)
+# Reshape as 2D arrays
+shape = (len(cc_range), len(ch_range))
+gs_2d = np.array(gs_energies).reshape(shape)
+s1_2d = np.array(s1_total_energies).reshape(shape)
+excitation_2d = np.array(excitation_energies_ev).reshape(shape)
 ```
 
-## 可视化方法
+This template follows the lowest returned TDDFT root at each point. Near state
+crossings, root order can change; production work needs state-character checks
+or an overlap-based state-tracking procedure. A constrained two-coordinate
+scan also does not optimize the remaining internal coordinates.
 
-### 等高线图（推荐）
+## Visualization
+
+### Contour Plot (Recommended)
 
 ```python
 import matplotlib.pyplot as plt
 
 CC, CH = np.meshgrid(cc_range, ch_range)
+gs_relative_kcal = (gs_2d - gs_2d.min()) * 627.509
 
 fig, ax = plt.subplots(figsize=(10, 8))
-contour = ax.contourf(CC, CH, gs_2d.T, levels=25, cmap='viridis')
-plt.colorbar(contour, ax=ax, label='Relative Energy (Ha)')
-ax.contour(CC, CH, gs_2d.T, levels=12, colors='white', alpha=0.4, linewidths=0.5)
+contour = ax.contourf(CC, CH, gs_relative_kcal.T, levels=25, cmap='viridis')
+plt.colorbar(contour, ax=ax, label='Relative energy (kcal mol⁻¹)')
+ax.contour(CC, CH, gs_relative_kcal.T, levels=12, colors='white', alpha=0.4, linewidths=0.5)
 
-# 标记最小值
+# Mark the minimum
 min_idx = np.unravel_index(gs_2d.argmin(), gs_2d.shape)
 ax.plot(cc_range[min_idx[0]], ch_range[min_idx[1]], 'r*', markersize=20)
 
@@ -130,66 +157,70 @@ plt.tight_layout()
 plt.savefig('2d_pes.png', dpi=300)
 ```
 
-## 结果分析
+## Analysis
 
-### 找到最小值
+### Locate the Minima
 
 ```python
-# 基态最小值
+# Ground-state minimum
 min_gs = np.unravel_index(gs_2d.argmin(), gs_2d.shape)
 gs_min_cc = cc_range[min_gs[0]]
 gs_min_ch = ch_range[min_gs[1]]
 
-# 激发态最小值
+# Excited-state minimum
 min_s1 = np.unravel_index(s1_2d.argmin(), s1_2d.shape)
 s1_min_cc = cc_range[min_s1[0]]
 s1_min_ch = ch_range[min_s1[1]]
 
-print(f"基态 S₀: C-C = {gs_min_cc:.4f} Å, C-H = {gs_min_ch:.4f} Å")
-print(f"激发态 S₁: C-C = {s1_min_cc:.4f} Å, C-H = {s1_min_ch:.4f} Å")
+print(f"Ground state S₀: C-C = {gs_min_cc:.4f} Å, C-H = {gs_min_ch:.4f} Å")
+print(f"Excited state S₁: C-C = {s1_min_cc:.4f} Å, C-H = {s1_min_ch:.4f} Å")
+
+def lies_on_boundary(index, shape):
+    return any(i == 0 or i == n - 1 for i, n in zip(index, shape))
+
+if lies_on_boundary(min_gs, gs_2d.shape) or lies_on_boundary(min_s1, s1_2d.shape):
+    print("Warning: a grid minimum lies on the boundary; extend the scan before interpreting it.")
 ```
 
-### Stokes 位移
+### Stokes Shift
 
 ```python
-# 垂直吸收（基态几何下的激发能）
-vertical_abs = s1_2d[min_gs]
+# Vertical absorption energy at the ground-state grid minimum
+vertical_abs = excitation_2d[min_gs]
 
-# 垂直发射（激发态几何下的激发能）
-vertical_em = s1_2d.min()
+# Vertical S1-S0 gap at the excited-state grid minimum
+vertical_em = excitation_2d[min_s1]
 
-# Stokes 位移
+# Vertical Stokes-shift estimate
 stokes = vertical_abs - vertical_em
 
-print(f"垂直吸收: {vertical_abs:.2f} eV ({1240/vertical_abs:.1f} nm)")
-print(f"垂直发射: {vertical_em:.2f} eV ({1240/vertical_em:.1f} nm)")
-print(f"Stokes 位移: {stokes:.3f} eV ({stokes*8065.5:.0f} cm⁻¹)")
+print(f"Vertical absorption: {vertical_abs:.2f} eV ({1240/vertical_abs:.1f} nm)")
+print(f"Vertical emission: {vertical_em:.2f} eV ({1240/vertical_em:.1f} nm)")
+print(f"Vertical Stokes-shift estimate: {stokes:.3f} eV ({stokes*8065.5:.0f} cm⁻¹)")
 ```
 
-## 实际案例：苯分子
+## Interpreting a Benzene Scan
 
-### 计算结果（15×15 网格，3-21G 基组）
+The previous version of this guide reported a boundary point as an S₁ minimum
+after minimizing `td.e[0]` alone. That quantity is the vertical excitation
+energy, not the excited-state total energy, so those numerical conclusions
+have been removed.
 
-**基态 S₀ 最小值**：
-- C-C = 1.4071 Å
-- C-H = 1.0750 Å
-- 与实验值（C-C ≈ 1.40 Å）一致
+Before reporting a minimum or a Stokes shift from a new scan:
 
-**激发态 S₁ 最小值**：
-- C-C = 1.8000 Å
-- C-H = 0.8500 Å
-- 激发能 = 2.90 eV (427 nm)
-
-**几何变化**：
-- Δ(C-C) = +0.393 Å (+27.9%)
-- Δ(C-H) = -0.225 Å (-20.9%)
-
-**Stokes 位移**：
-- 垂直吸收：5.60 eV (222 nm)
-- 垂直发射：2.90 eV (427 nm)
-- Stokes 位移：2.70 eV (21,751 cm⁻¹)
+1. minimize `E_S0(R)` and `E_S0(R) + omega_S1(R)` on their respective grids;
+2. reject a claimed minimum that lies on a grid boundary and extend the range;
+3. check SCF and response convergence at every point;
+4. track the character of the target state rather than assuming root 1 remains
+   the same state across the grid;
+5. refine the grid and relax unscanned coordinates where the scientific
+   question requires an equilibrium geometry;
+6. distinguish a vertical energy-gap estimate from a vibronic or 0-0 Stokes
+   shift.
 
 ---
 
-**创建日期**：2026-03-09
-**适用版本**：PySCF v2.12.1
+**Created**: 2026-03-09
+
+**Original draft environment**: PySCF v2.12.1. Revalidate API behavior and
+numerical settings for the installed version.

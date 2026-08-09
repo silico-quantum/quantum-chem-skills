@@ -1,8 +1,8 @@
 ---
 name: rdkit-chemistry
-version: 1.0.0
-description: RDKit molecular analysis and visualization. Use for molecular conformer generation, force field optimization, charge calculation, molecular descriptors, and non-covalent interaction analysis.
-homepage: https://www.rdkit.org
+description: Use when generating molecular conformers or performing RDKit-based force-field optimization, descriptors, charge analysis, noncovalent-interaction analysis, or visualization.
+license: MIT
+compatibility: Requires Python and RDKit; quantum-chemistry and rendering examples have additional optional dependencies.
 ---
 
 # RDKit Chemistry Analysis Skill

@@ -1,20 +1,15 @@
 ---
 name: molecular-orbital-analysis
-version: 1.0.0
-description: Complete workflow for molecular orbital analysis using PySCF, Multiwfn, and PyMOL
-homepage: https://github.com/STOKES-DOT
-metadata:
-  category: quantum-chemistry
-  tools: ["pyscf", "multiwfn", "pymol"]
-  requirements:
-    - PySCF (quantum chemistry)
-    - Multiwfn (wavefunction analysis)
-    - PyMOL (molecular visualization)
+description: Use when analyzing and visualizing molecular orbitals with PySCF, Multiwfn, and PyMOL-compatible outputs.
+license: MIT
+compatibility: Requires Python, PySCF, Multiwfn, and optionally PyMOL; installation details are platform-specific.
 ---
 
-# Molecular Orbital Analysis - Complete Workflow
+# Molecular Orbital Analysis Workflow Guide
 
-This skill provides a complete workflow for analyzing molecular orbitals using quantum chemistry calculations and visualization.
+This skill describes a workflow for analyzing molecular orbitals with quantum
+chemistry calculations and visualization. It is a guide: this directory does
+not contain a complete automation program.
 
 ## Overview
 
@@ -28,16 +23,16 @@ The workflow consists of three main steps:
 ### Software Installation
 
 ```bash
-# Python packages
-pip install pyscf numpy matplotlib
+# Python packages used by the examples
+python -m pip install pyscf numpy matplotlib
 
-# Multiwfn (via Homebrew)
-brew tap digital-chemistry-laboratory/multiwfn
-brew install --HEAD digital-chemistry-laboratory/multiwfn/multiwfn
-
-# PyMOL
-brew install pymol
+# Verify separately installed external programs.
+command -v Multiwfn
+command -v pymol
 ```
+
+Install Multiwfn and PyMOL from their upstream distribution channels or a
+trusted platform package. Confirm the executable names and versions locally.
 
 ### Environment Setup
 
@@ -74,7 +69,7 @@ Use the template script:
 
 ```python
 #!/usr/bin/env python3
-from pyscf import gto, scf
+from pyscf import dft, gto, scf
 from pyscf.tools import molden
 
 # Create molecule
@@ -87,7 +82,12 @@ mol = gto.M(
 )
 
 # Perform calculation
-mf = scf.RHF(mol)  # or RKS for DFT
+# Hartree-Fock example:
+mf = scf.RHF(mol)
+
+# For a DFT calculation instead, use for example:
+# mf = dft.RKS(mol)
+# mf.xc = 'PBE0'
 mf.kernel()
 
 # Output results
@@ -116,7 +116,7 @@ molecule.molden
 q
 EOF
 
-OMP_STACKSIZE=64000000 multiwfn < multiwfn_input.txt
+OMP_STACKSIZE=64000000 Multiwfn < multiwfn_input.txt
 ```
 
 **Finding orbital indices:**
@@ -160,14 +160,15 @@ cmd.png('orbital.png', width=1400, height=1050, dpi=150, ray=1)
 cmd.quit()
 ```
 
-## Automation Script
+## Automation Skeleton
 
-Use this complete automation script:
+The following skeleton illustrates orchestration only. The Multiwfn and PyMOL
+sections are placeholders and must be implemented and validated before use.
 
 ```python
 #!/usr/bin/env python3
 """
-Complete molecular orbital analysis pipeline
+Molecular orbital analysis pipeline skeleton
 Usage: python analyze_molecule.py molecule.xyz
 """
 import sys
@@ -179,7 +180,7 @@ import pymol
 from pymol import cmd
 
 def analyze_molecule(xyz_file, basis='6-31G*', homo_only=False):
-    """Complete molecular orbital analysis"""
+    """Run the implemented portions of the orbital-analysis skeleton."""
 
     # Step 1: Quantum chemistry calculation
     print("=" * 60)
@@ -215,7 +216,7 @@ def analyze_molecule(xyz_file, basis='6-31G*', homo_only=False):
     # PyMOL visualization code
     # ... (automation code)
 
-    print("\n✅ Analysis complete!")
+    print("\nImplemented steps complete; validate generated files before use.")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
@@ -228,15 +229,21 @@ if __name__ == '__main__':
 ## Common Parameters
 
 ### Basis Sets
-- **6-31G***: Standard Pople basis (recommended for routine calculations)
-- **cc-pVDZ**: Correlation-consistent basis
-- **def2-TZVP**: Triple-zeta basis for higher accuracy
-- **sto-3g**: Minimal basis (for testing only)
+- **6-31G***: Pople split-valence basis with polarization
+- **cc-pVDZ**: Correlation-consistent double-zeta basis
+- **def2-TZVP**: Karlsruhe triple-zeta valence basis with polarization
+- **STO-3G**: Minimal basis, generally suitable only for demonstrations
+
+Choose and justify a basis for the target property and chemical system; this
+list is not an accuracy ranking.
 
 ### Isosurface Levels
-- **0.05**: Standard for most orbitals
-- **0.03**: For diffuse orbitals (e.g., π systems)
-- **0.08**: For compact orbitals
+- **0.05**: example starting value
+- **0.03**: lower-value surface that may show more diffuse regions
+- **0.08**: higher-value surface that emphasizes larger amplitudes
+
+Report the chosen value and use the same absolute positive and negative levels
+when comparing orbitals.
 
 ### PyMOL Customization
 
@@ -253,7 +260,7 @@ if __name__ == '__main__':
 
 ## Output Files
 
-Typical output structure:
+Expected output structure after the placeholder steps have been implemented:
 ```
 <molecule>/
 ├── molecule.xyz           # Input structure
