@@ -1,469 +1,179 @@
 ---
 name: gaussian
-description: Use when preparing, reviewing, or troubleshooting Gaussian 16 electronic-structure calculations, including optimization, frequencies, excited states, and wavefunction methods.
+description: Use when preparing, reviewing, or troubleshooting licensed Gaussian electronic-structure calculations, especially jobs involving optimization, frequencies, excited states, checkpoint reuse, or Gaussian input and output files.
 license: MIT
-compatibility: Requires a separately licensed Gaussian 16 installation; remote and scheduler commands depend on the user's environment.
+compatibility: Requires an authorized Gaussian installation; supported keywords and utilities depend on the installed product revision and site configuration.
 ---
 
-# Gaussian 16 — Quantum Chemistry Software
-
-## Overview
-
-Gaussian 16 is a general-purpose quantum-chemistry program for electronic
-structure calculations. Available methods and options depend on the licensed
-revision; consult its documentation before relying on a keyword or method.
-
-Gaussian is proprietary software. Confirm that a licensed installation is
-available locally or on an authorized remote system before running a job.
-
----
-
-## Optional Remote Connection
-
-```bash
-ssh -p "$QC_PORT" "$QC_USER@$QC_HOST"
-module load "$GAUSSIAN_MODULE"  # Site-specific; omit when unnecessary.
-```
-
-Keep host names, account names, ports, module names, and credentials in private
-shell or scheduler configuration rather than in a reusable skill.
-
----
-
-## Input File Format (.gjf)
-
-```
-%chk=filename.chk          # Checkpoint file
-%mem=60GB                  # Memory allocation
-%nproc=64                  # Number of CPU cores
-# route_section             # Method, basis set, job type, options
-
-Title
-Charge SpinMultiplicity     # Molecular charge and spin (0 1 = neutral singlet)
-Cartesian or Z-Matrix coordinates
-```
-
----
-
-## Link0 Commands
-
-| Command | Description |
-|---------|-------------|
-| `%chk=file.chk` | Checkpoint file path |
-| `%mem=60GB` | Memory (any unit: MB, GB) |
-| `%nproc=64` | CPU cores |
-| `%nprocshared=32` | Shared memory parallelism |
-| `%oldchk=file.chk` | Continue from existing checkpoint |
-| `%save` | Force checkpoint saving |
-
----
-
-## Job Types
-
-| Keyword | Description | Common Options |
-|---------|-------------|----------------|
-| `SP` | Single-point energy | Default calculation |
-| `Opt` | Geometry optimization | `Opt=CalcFC`, `Opt=TS`, `Opt=Tight`, `Opt=MaxStep=N` |
-| `Freq` | Frequency analysis | `Freq=Raman`, `Freq=HPC` |
-| `Opt Freq` | Optimize then compute frequencies | Verify minima/transition states |
-| `Scan` | Potential energy surface scan | `Scan=ModRedundant`, `Scan=Bond`, `Scan=Angle` |
-| `IRC` | Intrinsic reaction coordinate | Follow reaction path from TS |
-| `Polar` | Polarizability | `Polar=EnOnly` |
-| `ADMP` | Car-Parrinello molecular dynamics | |
-| `BOMD` | Born-Oppenheimer MD | |
-| `stable` | Wavefunction stability test | |
-
----
-
-## Methods
-
-### Hartree-Fock
-```
-# HF/6-31G*
-```
-- `HF` — Restricted (RHF), `UHF` — Unrestricted, `ROHF` — Restricted open-shell
-
-### DFT Functionals
-
-| Functional | Type | HF Exchange | Notes |
-|------------|------|-------------|-------|
-| `B3LYP` | Hybrid GGA | 20% | Most popular, good all-round |
-| `PBE0` | Hybrid GGA | 25% | Based on PBE, reliable |
-| `M06-2X` | Meta-GGA hybrid | 54% | Good for non-covalent, thermochemistry |
-| `M06` | Meta-GGA hybrid | 27% | Minnesota functional |
-| `CAM-B3LYP` | Range-separated hybrid | Variable | Long-range corrected |
-| `WB97X-D` | Range-separated + D3 | Variable | Dispersion-corrected |
-| `WB97X-D3BJ` | Range-separated + D3(BJ) | Variable | Better dispersion |
-| `LC-WPBE` | Long-range corrected | 100% at long range | Charge-transfer states |
-| `wPBE` | Long-range corrected | 100% at long range | Same as LC-WPBE |
-| `TPSSH` | Hybrid meta-GGA | 10% | |
-| `BP86` | GGA | 0% | |
-| `PBE` | GGA | 0% | |
-| `BLYP` | GGA | 0% | |
-| `SVWN5` | LDA | 0% | |
-| `HSEHJS` | Range-separated | 50% at short range | Screened Coulomb |
-
-### Wave Function Methods
-
-| Method | Description |
-|--------|-------------|
-| `MP4` | 4th-order Møller-Plesset perturbation |
-| `MP3` | 3rd-order MP |
-| `MP2` | 2nd-order MP (also `MP2=Full`) |
-| `CCSD` | Coupled-cluster singles + doubles |
-| `CCSD(T)` | CCSD with perturbative triples |
-| `CCSD=T` | CCSD with full triples (non-perturbative) |
-| `CCD`, `CCSD`, `CID`, `CISD` | Other coupled-cluster variants |
-| `CASSCF(n,m)` | Complete active space SCF (n electrons, m orbitals) |
-| `CASPT2` | Multi-state second-order perturbation |
-| `EOMCCSD` | Equation-of-motion CCSD (excited states) |
-| `SAC-CI` | Symmetry-adapted cluster CI |
-| `GVB` | Generalized valence bond |
-| `CIS` | Configuration interaction singles |
-| `CIS(D)` | CIS with perturbative doubles |
-
-### Semi-Empirical
-```
-# CNDO, INDO, MINDO3, MNDO, AM1, PM3, ZINDO
-```
-
----
-
-## Basis Sets
-
-### Pople Split-Valence
-| Basis | Description |
-|-------|-------------|
-| `STO-3G` | Minimal basis (fast) |
-| `3-21G` | Split-valence, lightest |
-| `6-21G` | Pople split-valence |
-| `6-31G` | Double-zeta, standard for organics |
-| `6-31G*` | With polarization on heavy atoms |
-| `6-31G**` | With polarization on all atoms |
-| `6-31+G*` | With diffusion on heavy atoms |
-| `6-31++G**` | With diffusion on all |
-| `6-311G` | Triple-zeta |
-| `6-311G*` | Triple-zeta + polarization |
-| `6-311++G(2d,2p)` | Highly extended |
-
-### Correlation-Consistent (cc-pVnZ)
-```
-cc-pVDZ, cc-pVTZ, cc-pVQZ, cc-pV5Z, cc-pV6Z
-aug-cc-pVDZ, aug-cc-pVTZ, aug-cc-pVQZ    # Augmented with diffuse functions
-```
-
-### Def2 / Karlsruhe
-```
-def2-SVP, def2-TZVP, def2-QZVP
-def2-TZVPP — with polarization functions
-```
-
-### Effective Core Potentials (ECPs)
-| ECP | Description |
-|-----|-------------|
-| `LANL2DZ` | Los Alamos ECP + DZ basis |
-| `LANL2DZdp` | LANL2DZ with polarization |
-| `Stuttgart` | Stuttgart-Cologne ECPs |
-| `CRENBL` | Relativistic ECP |
-
-### Other
-| Basis | Description |
-|-------|-------------|
-| `cc-pCVnZ` | Core-valence (for core excitations) |
-| `pc-n` | Polarization consistent basis |
-| `pcseg-n` | Segmented polarization consistent |
-| `N07D` | Density-fitting basis sets |
-
----
-
-## TDDFT — Excited States
-
-```
-# td=(nstates=10,root=1,singlets) b3lyp/6-31G*
-# td=(nstates=10,triplets) b3lyp/6-31G*   # Triplet states only
-```
-
-**Options:**
-- `nstates=N` — Number of excited states (default 10)
-- `root=N` — Optimize/persist on state N
-- `singlets` — Singlet excitations (default)
-- `triplets` — Triplet excitations
-- `alltrans` — Include all triplet-singlet transitions
-- `50-50` — 50% CI coefficients for each determinant
-- `50-50TDDFT` — Special for degenerate states
-
-**For vertical emission:**
-```
-# td=(nstates=5,singlets) b3lyp/6-31G*     # Excitation
-# b3lyp/6-31G* td=(root=1) geom=check     # Emission from S1
-```
-
----
-
-## Solvent Effects (SCRF)
-
-```
-# b3lyp/6-31G* scrf=(smd,solvent=acetonitrile)
-# b3lyp/6-31G* scrf=(pcm,solvent=water)
-```
-
-**SCRF Models:**
-| Model | Keyword | Notes |
-|-------|---------|-------|
-| PCM | `SCRF=PCM` | Polarizable continuum |
-| SMD | `SCRF=SMD` | Solvent model based on density (G16 default) |
-| CPMF | `SCRF=CM5` | |
-| HCTH | `SCRF=HCTH` | |
-| SWIG | `SCRF=SWIG` | |
-
-**Common Solvents:** `water`, `ethanol`, `methanol`, `acetonitrile`, `dmso`, `dmf`, `chloroform`, `toluene`, `benzene`, `diethylether`, `thf`, `acetone`
-
----
-
-## Geometry Optimization Options
-
-```
-# opt=calcfc           # Compute force constants initially (default for TS)
-# opt=ts               # Transition state search
-# opt=tight            # Tight convergence criteria
-# opt=gdiis            # Use GDIIS for optimization
-# opt=modredundant     # Modredundant coordinates
-# opt=maxstep=n        # Maximum step size (default 0.3 bohr)
-# opt=readvariance     # Read variance data
-# freq=hpc             # HPC-mode frequency scaling
-```
-
-**ModRedundant examples (in input):**
-```
-C 1 2 R    # Define bond between atoms 1-2
-D 1 2 3 4 180.0 F    # Scan dihedral angle 1-2-3-4 to 180°
-```
-
----
-
-## Frequency Options
-
-```
-# freq=hindered rotor   # Include hindered rotor corrections
-# freq=raman             # Raman activity
-# freq=check            # Read frequency data from checkpoint
-# freq=(hinderedrot,temperature=298.15,pressure=1.0)
-```
-
----
-
-## Population Analysis
-
-```
-# pop=full              # Full AO/MO analysis
-# pop=full,nbomo        # Include NBOs
-# pop=nbo               # Natural Bond Orbital analysis
-# pop=npa               # Natural Population Analysis
-# pop=mk                # Merz-Kollman ESP charges
-# pop=chelpg            # CHELPG ESP charges
-# pop=(bondorder)       # Wiberg/Mayer bond order
-# pop=density          # Output density matrices
-```
-
----
-
-## NMR Properties
-
-```
-# nmr=cpa              # Continuous set of gauge transformations
-# nmr=spin-spin        # Spin-spin coupling constants
-# spinnuclear=         # Specify magnetic nuclei
-# mag=                  # Magnetic properties
-```
-
----
-
-## SCF Convergence
-
-```
-# scf=qc               # Quadratic convergence (most robust)
-# scf=xqc              # Extra quadratic convergence (try QC if this fails)
-# scf=diis             # DIIS (default)
-# scf=maxcyc=n         # Max SCF cycles (default 128)
-# scf=conver=n         # Convergence criterion (10^-n)
-# scf=tight            # Tight SCF convergence
-# scf=novariational    # Non-variational MOs
-# scf=direct           # Direct SCF (on-the-fly integral recomputation)
-# scf=fermi            # Fermi-VWN5 for metals
-```
-
----
-
-## CBS Extrapolation
-
-```
-# cbs=QB3              # CBS-QB3 composite method
-# cbs=APF              # CBS-APF method
-# cbs=4s               # 4-parameter CBS extrapolation
-# CBSExtrapolate=2/3   # Two-point extrapolation n=2,3
-```
-
-**Composite Methods:**
-| Method | Description |
-|--------|-------------|
-| `CBS-QB3` | CBS-QB3 composite |
-| `CBS-APF` | CBS-APF composite |
-| `W1U` | W1 ultra-fine |
-| `W1` | W1 method |
-| `W2` | W2 method |
-| `W3` | W3 method |
-| `W4` | W4 method |
-| `CBS-4s` | CBS with 4-parameter extrapolation |
-| `G1` | G1 composite |
-| `G2` | G2 composite |
-| `G3` | G3 composite |
-| `G4` | G4 composite |
-
----
-
-## IRC (Intrinsic Reaction Coordinate)
-
-```
-# irc=kalida            # Use Kupidonov-Khailenko algorithm
-# irc=gs2               # Gonzalez-Schlegel second-order algorithm (default)
-# irc=nproc=n           # Points per process in IRC
-# ircmax=n             # Maximum points in IRC path
-```
-
----
-
-## External Potentials / Basis
-
-```
-# ExtraBasis=file        # Additional basis functions
-# Gen                   # User-defined basis in input
-# GenECP               # User-defined ECP in input
-# Pseudo=read          # Read ECP from checkpoint
-# densityfit           # Use density fitting (DF) for efficiency
-# nodensityfit         # Disable density fitting
-```
-
----
-
-## Wavefunction Analysis
-
-```
-# Density=current       # Use current density
-# guess=modify,alter    # Modify/alter initial MOs
-# guess=hop            # Hückel initial guess
-# guess=read           # Read MOs from checkpoint
-# stable=opt           # Optimize unstable wavefunction
-# prop=flex           # Flexible property output
-```
-
----
-
-## Stabilty Analysis
-
-```
-# stable                # Test wavefunction stability
-# stable=opt            # Optimize to stable wavefunction
-```
-
----
-
-## Core Workflow
-
-1. Define the scientific target, molecular charge, spin multiplicity,
-   geometry source, environment, method, and basis set.
-2. Build the Link 0 section, route section, title, charge/multiplicity line, and
-   coordinates. Use the [worked input templates](WORKFLOWS.md) as starting
-   points, not as system-independent defaults.
-3. Run only on an authorized Gaussian installation. Preserve the exact input,
-   output, checkpoint, software revision, and execution environment.
-4. Check normal termination and the relevant convergence criteria. For a
-   claimed minimum, verify that no imaginary frequency remains; for a claimed
-   transition state, verify the intended single imaginary mode and use IRC when
-   the reaction-path assignment matters. Track the intended root during
-   excited-state optimization.
-5. Report method, basis, solvent model, charge, multiplicity, units, and any
-   unresolved warnings. The existence of an output file alone is not evidence
-   that the calculation succeeded.
-
----
-
-## Useful IOp Values
-
-| IOp | Description |
-|-----|-------------|
-| `IOp(3/76=055000)` | Scale HF exchange in hybrid functionals |
-| `IOp(3/77=055000)` | Scale correlation |
-| `IOp(3/78=...)` | DFT integration grid |
-| `IOp(5/33=...)` | Frozen core approximation |
-| `IOp(5/34=...)` | Use spherical harmonics |
-| `IOp(5/41=...)` | Population analysis options |
-
----
-
-## Converting Checkpoint Files
-
-```bash
-formchk filename.chk filename.fchk      # CHK → FCHK
-# or
-unfchk filename.chk filename.fchk       # Alternative
-```
-
----
-
-## Output Files
-
-| Extension | Description |
-|-----------|-------------|
-| `.log` | Main output file |
-| `.chk` | Binary checkpoint file |
-| `.fchk` | Formatted ASCII checkpoint |
-| `.out` | (sometimes used) |
-| `.cub` | Cube file for visualization |
-| `.int` | Two-electron integrals |
-| `.sbn` | Scratch binary file |
-
----
-
-## Official Keyword Index
-
-See the repository's [Gaussian keyword reference](KEYWORDS.md) and the
-[official Gaussian keyword index](https://gaussian.com/keywords/).
-
-Representative keyword families:
-
-ADMP, BD, BOMD, CacheSize, CASSCF, CBS Methods, CBSExtrapolate, CCD and CCSD, Charge, ChkBasis, CID and CISD, CIS, CNDO, Complex, Constants, Counterpoise, CPHF, Density, DensityFit and NoDensityFit, DFT Methods, DFTB and DFTBA, EET, EOMCCSD, EPT, External, ExtraBasis & ExtraDensityBasis, Field, FMM, Force, Freq, Gen and GenECP, GenChk, Geom, GFInput, GFPrint, Gn Methods, Guess, GVB, HF, Huckel, INDO, Integral, IOp, IRC, IRCmax, Link0 Commands, LSDA, MaxDisk, MINDO3, MNDO, MM Methods, MP Methods, Name, NMR, ONIOM, Opt, Output, PBC, Polar, Population, Pressure, Prop, Pseudo, Punch, QCI, Restart, SAC-CI, Scale, Scan, SCF, SCRF, Semi-Empirical Methods, SP, Sparse, Stable, Symmetry, TD, Temperature, Test, TestMO, TrackIO, Transformation, Units, Volume, W1 Methods, Window Keyword and Frozen Core Options, ZIndo
-
----
-
-## Advanced Topics
-
-###ONIOM (Embedded Fragment)
-```
-# oniom(b3lyp/6-31G*:pm3)=(...)
-
-Layer definition in molecule section:
-H  -1 0.0 0.0 0.0 q=0   # High layer
-L  0  0.0 0.0 0.0 q=+1  # Low layer
-...
-```
-
-### EOM-CCSD (Excited States / Ionization)
-```
-# eomccsd                # EOM-CCSD for excited states
-# eom(ip)                # Ionization potentials
-# eom(ea)                # Electron affinities
-# eom(ee)                # Two-electron excitations
-```
-
-### Density Fitting
-```
-# densityfit             # Enable DF for all calculations
-# scf=(nodensityfit)     # Disable DF for SCF only
-# mp2=fulldensityfit     # Full density fitting for MP2
-```
-
-### PBC (Periodic Boundary Conditions)
-```
-# pbc                    # Enable PBC calculations
-# pbe0/pcs Solvent=...   # With SCRF
-```
+# Gaussian electronic-structure calculations
+
+Treat every calculation as a provenance-bearing scientific run. Never infer
+success from an output file or checkpoint file merely existing, and never add
+keywords whose behavior has not been checked against the installed revision.
+
+## Prerequisites
+
+- Confirm access to a separately licensed, authorized Gaussian installation.
+- Record the product, revision, executable, scheduler, and site module used.
+- Locate the matching `formchk` and `unfchk` utilities when checkpoint
+  conversion is required. Do not mix utilities from an unrelated installation.
+- Obtain a writable scratch directory with sufficient quota and a scheduler
+  allocation consistent with `%Mem` and `%NProcShared`.
+- Keep hosts, user names, ports, credentials, module names, and scratch paths in
+  private site configuration, never in this reusable skill.
+
+Do not claim a Gaussian calculation was executed when the licensed executable
+was unavailable. Input review and static validation are distinct from a run.
+
+## Input contract
+
+Before writing the input, require and record:
+
+1. the target property or decision and its acceptance criteria;
+2. geometry source, coordinate units, molecular identity, and conformer;
+3. molecular charge and multiplicity, including an electron-count and spin
+   consistency check;
+4. electronic state and, for excited states, the requested manifold, number of
+   roots, target root, and how state identity will be tracked;
+5. method, basis set or ECP, solvent/environment model, and the source of that
+   protocol;
+6. job type, numerical settings, resource limits, and output units;
+7. new input, log, and checkpoint names plus any explicitly approved old
+   checkpoint.
+
+Fail closed when any item needed to interpret the result is unknown. Do not
+silently choose a functional, basis, charge, multiplicity, solvent, state, or
+unit. Refuse an existing output target unless overwrite was explicitly approved
+and its provenance is preserved.
+
+A Gaussian input has Link 0 commands, a route section, a title, the charge and
+multiplicity line, and a molecule specification unless `Geom` explicitly reads
+some or all of those data from a compatible checkpoint. Use
+[`WORKFLOWS.md`](WORKFLOWS.md) for minimal templates.
+
+## Workflow
+
+1. **Freeze the scientific protocol.** Document the target, molecular state,
+   geometry, method, basis/ECP, environment, and acceptance thresholds before
+   editing Gaussian input.
+2. **Create a fresh run identity.** Use unique input, log, and `%Chk` names.
+   When reading a prior job, use `%OldChk` for the immutable source and `%Chk`
+   for a new destination checkpoint. For S0-to-emission work, use the explicit
+   five-stage chain in [`WORKFLOWS.md`](WORKFLOWS.md); do not re-paste geometry
+   between accepted stages.
+3. **Build and review the input.** Check section order, blank lines, atom count,
+   geometry units, charge and multiplicity, route syntax, and resource values.
+   Resolve every placeholder in a template.
+4. **Check revision-specific syntax.** Consult the installed Gaussian manual or
+   the official keyword pages. [`KEYWORDS.md`](KEYWORDS.md) lists only a small,
+   conservative orientation set; it is not a production keyword catalogue.
+5. **Submit through the authorized local or scheduler procedure.** Capture the
+   exact command, exit status, scheduler job identifier, environment, and
+   standard error without embedding private connection details in the skill.
+6. **Parse the complete log.** Check termination, SCF and geometry convergence,
+   state tracking, warnings, and task-specific acceptance criteria. For every
+   excited-state stage, record excitation energy, oscillator strength, leading
+   configuration/NTO character, and a state-continuity decision rather than
+   following the root number alone.
+7. **Post-process only an accepted source job.** Convert a binary checkpoint to
+   a formatted checkpoint with:
+
+   ```bash
+   test ! -e molecule.fchk && test ! -L molecule.fchk || exit 1
+   formchk molecule.chk molecule.fchk
+   ```
+
+   The reverse operation is explicitly:
+
+   ```bash
+   test ! -e molecule-restored.chk && \
+     test ! -L molecule-restored.chk || exit 1
+   unfchk molecule.fchk molecule-restored.chk
+   ```
+
+   `formchk` is binary checkpoint to formatted checkpoint; `unfchk` is
+   formatted checkpoint to a machine-local binary checkpoint. Never describe
+   them as interchangeable alternatives.
+
+## Validation and acceptance
+
+Apply all relevant gates:
+
+- The process exit status is successful and the final job step contains
+  `Normal termination of Gaussian`; no later error or truncated section exists.
+- Every required SCF step converged. An `SCF Done` line by itself is not enough
+  to accept an optimization, frequency, or excited-state workflow.
+- An optimization reports convergence to a stationary point and the accepted
+  geometry is the final converged geometry, not merely the last printed one.
+- A claimed minimum has no chemically meaningful imaginary frequencies. A
+  claimed first-order transition state has exactly one intended negative mode,
+  and its displacement is inspected; use IRC when reaction-path assignment is
+  required. Report the numerical threshold used to distinguish noise.
+- Excited-state jobs retain the intended state character, not just the same
+  root number, across the geometry path.
+- A claimed S1 minimum has a compatible accepted excited-state frequency
+  analysis. Otherwise label it `optimized S1 stationary geometry` and record
+  `minimum_not_verified`.
+- A reported vertical emission energy is the target-state TD excitation energy
+  at the accepted excited-state geometry, with oscillator strength, units, and
+  state-character evidence. It is not a difference of raw SCF reference
+  energies from separate jobs.
+- Charge, multiplicity, atom count, method, basis/ECP, solvent, and units in the
+  output agree with the input contract.
+- A required checkpoint is non-empty and belongs to this accepted job. Its
+  existence does not replace log validation.
+- A generated formatted checkpoint is non-empty and `formchk` exits
+  successfully before it is supplied to downstream software.
+
+Record warnings and deviations even when all acceptance gates pass.
+
+## Failure handling
+
+- **No normal termination:** mark the run failed or incomplete; inspect the end
+  of the log and scheduler diagnostics before changing anything.
+- **Input or keyword error:** correct only the diagnosed syntax using the
+  installed revision's documentation. Do not pile on speculative keywords.
+- **SCF failure:** first check geometry, charge/spin, method suitability, linear
+  dependence, and numerical diagnostics. Change one justified setting at a
+  time and create a new run identity.
+- **Optimization failure:** inspect forces, steps, constraints, and the actual
+  structure. Do not accept the final printed geometry as optimized.
+- **Unexpected frequencies:** inspect normal modes and geometry; do not delete
+  modes, take absolute values, or relabel a saddle point as a minimum.
+- **Excited-state root change:** stop state-specific interpretation, identify
+  state character, and restart only with a documented tracking strategy.
+- **Checkpoint read failure:** verify revision compatibility, source-job
+  acceptance, and direction of conversion. Preserve the original checkpoint.
+- **Resource or license failure:** resolve the site allocation or authorization;
+  it is not a scientific convergence problem.
+
+Never overwrite the failed log. Keep it linked to the corrected rerun.
+
+## Output and reporting
+
+Return a compact run record containing:
+
+- status: `accepted`, `failed`, `incomplete`, or `not_run`;
+- molecular identity, geometry source, charge, multiplicity, and target state;
+- Gaussian product/revision and executable provenance;
+- method, basis/ECP, environment, numerical settings, and units;
+- scheduler/job identifier, resources, command, exit status, and elapsed time;
+- paths and hashes for input, complete log, accepted geometry, checkpoint, and
+  formatted checkpoint when created;
+- the exact termination, SCF, optimization, frequency, and state-tracking gates
+  applied;
+- requested observables with units, warnings, deviations, and unresolved
+  limitations.
+
+Separate measured output from interpretation. Leave unavailable values
+explicitly `not_computed`; never fill them with estimates or placeholders.
+
+## References
+
+- [Gaussian official keyword index](https://gaussian.com/keywords/)
+- [Gaussian Link 0 commands](https://gaussian.com/link0/)
+- [Gaussian geometry keyword](https://gaussian.com/geom/)
+- [Gaussian optimization keyword](https://gaussian.com/opt/)
+- [Gaussian formatted-checkpoint guidance](https://gaussian.com/wp-content/uploads/dl/remote.pdf)
+- [Local conservative keyword orientation](KEYWORDS.md)
+- [Local reviewed input templates](WORKFLOWS.md)

@@ -1,8 +1,8 @@
 {
   "name": "molecular-sampler",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Optional npm command shim for the Python molecular sampler",
+  "description": "Optional npm command shim for the deterministic Python molecular sampler",
   "scripts": {
     "sample": "python3 molecular_sampler.py"
   },

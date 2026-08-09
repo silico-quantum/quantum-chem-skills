@@ -3,6 +3,10 @@
 RDKit molecular feature calculation and visualization.
 """
 
+from _legacy_guard import refuse_legacy_example
+
+refuse_legacy_example(__file__)
+
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
 from rdkit.Chem import Draw

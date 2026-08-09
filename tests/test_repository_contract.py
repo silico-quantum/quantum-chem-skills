@@ -52,12 +52,58 @@ class RepositoryContractTests(unittest.TestCase):
         self.assertIn("python3 -m unittest discover -s tests -v", workflow)
         self.assertIn("python3 scripts/validate_repository.py .", workflow)
 
+    def test_supported_helper_help_does_not_require_optional_science_packages(self) -> None:
+        helpers = (
+            "molecular-sampler/molecular_sampler.py",
+            "molecular-orbital-analysis/scripts/generate_orbital_cubes.py",
+            "multiwfn/scripts/run_batch.py",
+            "pyscf/scripts/run_safe_dft_tda.py",
+            "momap/tools/extract.py",
+            "momap/tools/oled.py",
+            "momap/tools/plot.py",
+            "momap/tools/runner.py",
+            "momap/tools/tadf.py",
+            "xtb-cluster-md/scripts/build_cluster.py",
+            "xtb-cluster-md/scripts/run_xtb_md.py",
+            "xtb-cluster-md/scripts/validate_md_run.py",
+            "xtb-cluster-md/scripts/make_animation.py",
+            "xtb-cluster-md/scripts/make_atom_animation.py",
+            "xtb-cluster-md/scripts/make_local_cluster_animation.py",
+        )
+        for relative in helpers:
+            with self.subTest(helper=relative):
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / relative), "--help"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_node_metadata_does_not_model_the_python_runtime(self) -> None:
         package_path = ROOT / "molecular-sampler" / "package.json"
         package = json.loads(package_path.read_text(encoding="utf-8"))
 
         self.assertNotIn("python", package.get("dependencies", {}))
         self.assertFalse(str(package.get("main", "")).endswith(".py"))
+
+    def test_rdkit_legacy_examples_fail_before_optional_imports(self) -> None:
+        examples = ROOT / "rdkit-chemistry" / "examples"
+        for script in sorted(examples.glob("*.py")):
+            if script.name == "_legacy_guard.py":
+                continue
+            with self.subTest(script=script.name):
+                result = subprocess.run(
+                    [sys.executable, str(script)],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(
+                    "QUARANTINED LEGACY EXAMPLE",
+                    result.stdout + result.stderr,
+                )
 
     def test_readme_documents_supported_agent_install_locations(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -198,6 +244,37 @@ class RepositoryContractTests(unittest.TestCase):
                 result.stdout + result.stderr,
             )
 
+    def test_public_text_data_must_be_english(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill = root / "example-skill"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text(
+                "---\n"
+                "name: example-skill\n"
+                "description: Use when testing public data language.\n"
+                "license: MIT\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            cjk_text = "".join(chr(code) for code in (0x8F93, 0x5165, 0x683C, 0x5F0F))
+            (root / "example.json").write_text(
+                '{"label": "' + cjk_text + '"}\n', encoding="utf-8"
+            )
+            (root / "LICENSE").write_text(
+                "MIT License\nPermission is hereby granted, free of charge\n"
+                'THE SOFTWARE IS PROVIDED "AS IS"\n',
+                encoding="utf-8",
+            )
+
+            result = run_validator(root)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "example.json: contains CJK text; public text must be English",
+                result.stdout + result.stderr,
+            )
+
     def test_skill_reference_must_be_linked_from_skill_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -279,6 +356,31 @@ class RepositoryContractTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("invalid Python code block", result.stdout + result.stderr)
+
+    def test_code_fence_content_is_not_treated_as_a_markdown_link(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill = root / "example-skill"
+            skill.mkdir()
+            (skill / "SKILL.md").write_text(
+                "---\n"
+                "name: example-skill\n"
+                "description: Use when testing SMILES in code fences.\n"
+                "license: MIT\n"
+                "---\n\n"
+                "Inline SMILES: `C[C@H](O)c1ccccc1`.\n\n"
+                "```python\nsmiles = \"C[C@H](O)c1ccccc1\"\n```\n",
+                encoding="utf-8",
+            )
+            (root / "LICENSE").write_text(
+                "MIT License\nPermission is hereby granted, free of charge\n"
+                'THE SOFTWARE IS PROVIDED "AS IS"\n',
+                encoding="utf-8",
+            )
+
+            result = run_validator(root)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_repository_satisfies_contract(self) -> None:
         result = run_validator(ROOT)

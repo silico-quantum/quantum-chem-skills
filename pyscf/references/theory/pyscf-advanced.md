@@ -1,5 +1,11 @@
 # PySCF Advanced Features Reference
 
+> **Unvalidated historical draft.** The custom-functional and advanced-method
+> snippets below are not supported repository workflows. Verify every API,
+> derivative convention, unit, and numerical result against official PySCF
+> documentation and a pinned environment. See
+> [`../../tools/README.md`](../../tools/README.md).
+
 ## Custom Exchange-Correlation Functionals
 
 ### 1. Basic Functional Structure

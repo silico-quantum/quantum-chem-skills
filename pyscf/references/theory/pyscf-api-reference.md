@@ -1,5 +1,10 @@
 # Detailed PySCF API Reference
 
+> **Unvalidated historical draft.** Some names and signatures in this document
+> may not exist in the installed PySCF version. Use the official versioned API
+> documentation and verify each call before execution. See
+> [`../../tools/README.md`](../../tools/README.md).
+
 ## Module Imports
 
 ```python

@@ -3,11 +3,15 @@
 SCF - Self-Consistent Field calculations
 Hartree-Fock (RHF, UHF, ROHF) framework
 
-Usage:
+Historical interface (disabled):
     python scf.py <xyz_file> <method> [basis]
     python scf.py water.xyz RHF cc-pvdz
     python scf.py molecule.xyz UHF sto-3g
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -52,7 +56,7 @@ def run_scf(xyz_file, method='RHF', basis='cc-pvdz',
         method: RHF, UHF, ROHF
         basis: basis set
         charge: molecular charge
-        spin: spin multiplicity (0=singlet, 1=doublet, 2=triplet)
+        spin: Nalpha - Nbeta = 2S (0=singlet, 1=doublet, 2=triplet)
         chkfile: checkpoint file (optional)
     
     Returns:
@@ -153,7 +157,3 @@ def main():
         spin = int(sys.argv[idx + 1])
     
     run_scf(xyz_file, method, basis, charge, spin)
-
-
-if __name__ == '__main__':
-    main()

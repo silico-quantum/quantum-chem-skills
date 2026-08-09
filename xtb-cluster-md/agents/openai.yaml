@@ -1,0 +1,4 @@
+interface:
+  display_name: "xTB Cluster Molecular Dynamics"
+  short_description: "Build and validate traceable xTB cluster MD runs"
+  default_prompt: "Use $xtb-cluster-md to build a non-overlapping molecular cluster, run explicit-state xTB MD, and validate the complete trajectory."

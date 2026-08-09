@@ -10,8 +10,11 @@ Takes Stage 3 Gaussian outputs (S0/T1/S1 logs) and runs:
   4. Ranking by target window + oscillator strength + ΔE_ST
 
 Usage:
-  python stage4_momap.py candidates.csv --target blue
-  python stage4_momap.py --mol-id mol_07566 --s0 s0.log --s1 s1.log --t1 t1.log --target green
+  python stage4_momap.py candidates.csv --target blue IDENTITY_FLAGS
+  python stage4_momap.py --mol-id mol_07566 --s0 s0.log --s1 s1.log --t1 t1.log --target green IDENTITY_FLAGS
+
+IDENTITY_FLAGS are the required --expected-build,
+--expected-launcher-sha256, and --expected-version-banner arguments.
 
 Color presets (--target):
   deep-blue  430-460 nm    sky-blue  470-500 nm
@@ -59,6 +62,10 @@ def run_single(
     output_dir,
     temperature=300,
     hso_cm1=None,
+    *,
+    expected_build,
+    expected_launcher_sha256,
+    expected_version_banner,
 ):
     """Run MOMAP TADF pipeline for one molecule via tadf.py."""
     tadf_script = os.path.join(TOOLS_DIR, 'tadf.py')
@@ -74,29 +81,33 @@ def run_single(
             output_dir,
             temperature,
             hso_cm1=hso_cm1,
+            expected_build=expected_build,
+            expected_launcher_sha256=expected_launcher_sha256,
+            expected_version_banner=expected_version_banner,
         )
 
     output_path = Path(output_dir).expanduser()
     output_path.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        prefix='.momap-result-', suffix='.json', dir=output_path, delete=False
-    ) as handle:
-        json_output = Path(handle.name)
+    with tempfile.TemporaryDirectory(
+        prefix='.momap-result-', dir=output_path
+    ) as result_dir:
+        json_output = Path(result_dir) / 'result.json'
+        cmd = [
+            sys.executable, tadf_script, mol_id,
+            '--s0', s0_log,
+            '--s1', s1_log,
+            '--output', output_dir,
+            '--temperature', str(temperature),
+            '--json-output', str(json_output),
+            '--expected-build', expected_build,
+            '--expected-launcher-sha256', expected_launcher_sha256,
+            '--expected-version-banner', expected_version_banner,
+        ]
+        if t1_log:
+            cmd.extend(['--t1', t1_log])
+        if hso_cm1 is not None:
+            cmd.extend(['--hso-cm1', str(hso_cm1)])
 
-    cmd = [
-        sys.executable, tadf_script, mol_id,
-        '--s0', s0_log,
-        '--s1', s1_log,
-        '--output', output_dir,
-        '--temperature', str(temperature),
-        '--json-output', str(json_output),
-    ]
-    if t1_log:
-        cmd.extend(['--t1', t1_log])
-    if hso_cm1 is not None:
-        cmd.extend(['--hso-cm1', str(hso_cm1)])
-
-    try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
         try:
             with open(json_output) as f:
@@ -114,8 +125,6 @@ def run_single(
                 payload.setdefault('error', result.stderr[-200:])
             print(f"  ❌ {mol_id}: {payload.get('error', 'MOMAP processing failed')}")
         return payload
-    finally:
-        json_output.unlink(missing_ok=True)
 
 def rank_candidates(results, target_window=(450, 490)):
     """Rank TADF candidates by target window + ΔE_ST + oscillator strength."""
@@ -268,6 +277,18 @@ def main():
         type=float,
         help='Explicit S1-T1 spin-orbit coupling in cm^-1; omit to skip ISC',
     )
+    parser.add_argument(
+        '--expected-build', required=True, choices=['2024A'],
+        help='Verified MOMAP build contract (currently 2024A only)',
+    )
+    parser.add_argument(
+        '--expected-launcher-sha256', required=True,
+        help='Expected SHA-256 of the original licensed momap launcher',
+    )
+    parser.add_argument(
+        '--expected-version-banner', required=True,
+        help='Exact MOMAP version-banner line expected once per stage',
+    )
     parser.add_argument('--target', default='blue',
                        choices=list(COLOR_PRESETS.keys()),
                        help='Target emission color (preset window). Can also be set via --config from Stage 0.')
@@ -322,6 +343,9 @@ def main():
             str(output_dir),
             args.temperature,
             args.hso_cm1,
+            expected_build=args.expected_build,
+            expected_launcher_sha256=args.expected_launcher_sha256,
+            expected_version_banner=args.expected_version_banner,
         )
         results.append(result)
     
@@ -363,6 +387,9 @@ def main():
                     str(output_dir),
                     args.temperature,
                     hso_cm1,
+                    expected_build=args.expected_build,
+                    expected_launcher_sha256=args.expected_launcher_sha256,
+                    expected_version_banner=args.expected_version_banner,
                 )
                 results.append(result)
     

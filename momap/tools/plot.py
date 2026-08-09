@@ -8,7 +8,24 @@ Blue window (450–490 nm) highlighting for TADF screening.
 import sys
 import os
 import argparse
+import math
 from pathlib import Path
+
+DEFAULT_ENERGY_WINDOW_EV = (1.0, 5.0)
+
+
+def ensure_new_output_path(output_path):
+    """Resolve an output path and refuse silent replacement."""
+    output_path = Path(output_path).expanduser().resolve()
+    if output_path.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite existing spectrum image: {output_path}"
+        )
+    if not output_path.parent.is_dir():
+        raise FileNotFoundError(
+            f"Spectrum output parent does not exist: {output_path.parent}"
+        )
+    return output_path
 
 def load_spec_data(filepath):
     """Load MOMAP spec.tvcf.spec.dat."""
@@ -20,7 +37,10 @@ def load_spec_data(filepath):
                 continue
             parts = line.split()
             if len(parts) >= 7:
-                data.append([float(x) for x in parts[:7]])
+                row = [float(x) for x in parts[:7]]
+                if not all(math.isfinite(value) for value in row):
+                    raise ValueError(f"Non-finite spectrum value in {filepath}")
+                data.append(row)
     if not data:
         raise ValueError(f"No data in {filepath}")
     
@@ -36,12 +56,63 @@ def load_spec_data(filepath):
 
 def normalize_positive(arr):
     pos = [max(v, 0) for v in arr]
-    mx = max(pos) if max(pos) > 0 else 1
+    mx = max(pos, default=0.0)
+    if mx <= 0:
+        return [0.0 for _ in pos], 0.0
     return [v / mx for v in pos], mx
 
-def plot_with_pillow(spec, output_path, title='MOMAP Spectrum', blue_window=(450, 490)):
+
+def validate_spectrum(spec, energy_window=DEFAULT_ENERGY_WINDOW_EV):
+    """Reject empty, inconsistent, or all-zero spectra before plotting."""
+    required = ('energy_ev', 'wavelength', 'fc_abs', 'fc_emi')
+    lengths = {key: len(spec.get(key, ())) for key in required}
+    if not lengths or len(set(lengths.values())) != 1 or next(iter(lengths.values())) == 0:
+        raise ValueError(f"Inconsistent or empty spectrum columns: {lengths}")
+
+    for key in required:
+        if not all(math.isfinite(value) for value in spec[key]):
+            raise ValueError(f"Non-finite values in spectrum column {key}")
+
+    emission = [max(value, 0.0) for value in spec['fc_emi']]
+    if max(emission, default=0.0) <= 0:
+        raise ValueError("Spectrum has no positive emission intensity")
+
+    low, high = energy_window
+    if not math.isfinite(low) or not math.isfinite(high) or low >= high:
+        raise ValueError("Energy window must contain two increasing finite eV values")
+    energy_indices = [
+        index for index, value in enumerate(spec['energy_ev'])
+        if low <= value <= high
+    ]
+    if len(energy_indices) < 2:
+        raise ValueError(
+            f"Spectrum has fewer than two points in the {low:g}-{high:g} eV window"
+        )
+    if not any(emission[index] > 0 for index in energy_indices):
+        raise ValueError("Selected energy window contains no positive emission")
+
+    wavelength_indices = [
+        index for index, value in enumerate(spec['wavelength'])
+        if 250 < value < 800 and emission[index] > 0
+    ]
+    if len(wavelength_indices) < 2:
+        raise ValueError(
+            "Spectrum has fewer than two positive points in the 250-800 nm window"
+        )
+    return energy_indices, wavelength_indices
+
+def plot_with_pillow(
+    spec,
+    output_path,
+    title='MOMAP Spectrum',
+    blue_window=(450, 490),
+    energy_window=DEFAULT_ENERGY_WINDOW_EV,
+):
     """Render spectrum using Pillow (no matplotlib required)."""
+    output_path = ensure_new_output_path(output_path)
     from PIL import Image, ImageDraw
+
+    ev_mask, wl_mask = validate_spectrum(spec, energy_window)
     
     W, H = 1600, 1000
     img = Image.new('RGB', (W, H), (12, 12, 30))
@@ -79,19 +150,17 @@ def plot_with_pillow(spec, output_path, title='MOMAP Spectrum', blue_window=(450
     
     draw.text((lx + lw//2 - 50, ly+lh+10), 'Energy (eV)', fill=TEXT_COLOR)
     
-    # Plot emission
-    ev_mask = [i for i, e in enumerate(ev) if 0.02 < e < 0.30]
-    if ev_mask:
-        pts = []
-        for i in ev_mask:
-            x = lx + int(lw * (ev[i] - 0.02) / 0.28)
-            y = ly + lh - int(lh * emi_norm[i] * 0.95)
-            pts.append((x, y))
-        for j in range(len(pts)-1):
-            draw.line([pts[j], pts[j+1]], fill=EMISSION_COLOR, width=2)
-        # Fill
-        for j in range(len(pts)):
-            draw.line([pts[j], (pts[j][0], ly+lh)], fill=(79, 195, 247, 20))
+    # Plot emission. Column 2 is energy in eV, so use an eV-scale window.
+    energy_low, energy_high = energy_window
+    pts = []
+    for i in ev_mask:
+        x = lx + int(lw * (ev[i] - energy_low) / (energy_high - energy_low))
+        y = ly + lh - int(lh * emi_norm[i] * 0.95)
+        pts.append((x, y))
+    for j in range(len(pts)-1):
+        draw.line([pts[j], pts[j+1]], fill=EMISSION_COLOR, width=2)
+    for point in pts:
+        draw.line([point, (point[0], ly+lh)], fill=(79, 195, 247, 20))
     
     # Plot absorption
     if abs_max > 0:
@@ -112,7 +181,6 @@ def plot_with_pillow(spec, output_path, title='MOMAP Spectrum', blue_window=(450
     rx, ry, rw, rh = lx + lw + 40, margin_t, half_w, ph
     
     wl = spec['wavelength']
-    wl_mask = [i for i, w in enumerate(wl) if 250 < w < 800 and emi_norm[i] > 0.001]
     
     draw.rectangle([rx, ry, rx+rw, ry+rh], outline=(60, 60, 90))
     for i in range(1, 5):
@@ -162,20 +230,34 @@ def plot_with_pillow(spec, output_path, title='MOMAP Spectrum', blue_window=(450
     
     # Footer
     draw.rectangle([0, H-25, W, H], fill=(8, 8, 20))
-    draw.text((W//2-280, H-22), 
-              f"MOMAP 2024A | TVCF | T=300K | Peak: {peaks[0][0]:.0f} nm" if peaks else "MOMAP 2024A | TVCF | T=300K",
-              fill=(100, 100, 120))
+    draw.text(
+        (W//2-220, H-22),
+        (
+            f"MOMAP TVCF spectrum | Peak: {peaks[0][0]:.0f} nm"
+            if peaks
+            else "MOMAP TVCF spectrum"
+        ),
+        fill=(100, 100, 120),
+    )
     
     img.save(output_path, 'PNG')
     return output_path
 
-def plot_with_matplotlib(spec, output_path, title='MOMAP Spectrum', blue_window=(450, 490)):
+def plot_with_matplotlib(
+    spec,
+    output_path,
+    title='MOMAP Spectrum',
+    blue_window=(450, 490),
+    energy_window=DEFAULT_ENERGY_WINDOW_EV,
+):
     """Render spectrum using matplotlib (higher quality)."""
+    output_path = ensure_new_output_path(output_path)
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     import numpy as np
     
+    energy_indices, wavelength_indices = validate_spectrum(spec, energy_window)
     ev = np.array(spec['energy_ev'])
     wl = np.array(spec['wavelength'])
     emi = np.maximum(np.array(spec['fc_emi']), 0)
@@ -191,7 +273,8 @@ def plot_with_matplotlib(spec, output_path, title='MOMAP Spectrum', blue_window=
     # Energy domain
     ax = axes[0]
     ax.set_facecolor('#111133')
-    mask = (ev > 0.02) & (ev < 0.30)
+    mask = np.zeros(ev.shape, dtype=bool)
+    mask[energy_indices] = True
     ax.plot(ev[mask], emi[mask], color='#4fc3f7', lw=1.5, label='Emission')
     if abs_.max() > 0:
         ax.plot(ev[mask], abs_[mask], color='#ff8a80', lw=1, alpha=0.7, label='Absorption')
@@ -205,7 +288,8 @@ def plot_with_matplotlib(spec, output_path, title='MOMAP Spectrum', blue_window=
     # Wavelength domain
     ax = axes[1]
     ax.set_facecolor('#111133')
-    mask = (wl > 250) & (wl < 800) & (emi > 0.001)
+    mask = np.zeros(wl.shape, dtype=bool)
+    mask[wavelength_indices] = True
     
     # Blue window
     bw_start, bw_end = blue_window
@@ -241,6 +325,11 @@ def main():
     parser.add_argument('--title', '-t', default='MOMAP TVCF Spectrum', help='Plot title')
     parser.add_argument('--blue', '-b', nargs=2, type=float, default=[450, 490],
                        help='Blue window range in nm (default: 450 490)')
+    parser.add_argument(
+        '--energy-window', nargs=2, type=float, default=list(DEFAULT_ENERGY_WINDOW_EV),
+        metavar=('MIN_EV', 'MAX_EV'),
+        help='Energy-domain plot window in eV (default: 1 5)',
+    )
     parser.add_argument('--desktop', '-D', action='store_true',
                        help='Save to Desktop')
     args = parser.parse_args()
@@ -253,20 +342,29 @@ def main():
         args.output = os.path.join(desktop, os.path.basename(args.output))
     
     spec = load_spec_data(args.spec_file)
+    energy_window = tuple(args.energy_window)
+    validate_spectrum(spec, energy_window)
     
     # Try matplotlib first, fall back to Pillow
     try:
-        path = plot_with_matplotlib(spec, args.output, args.title, tuple(args.blue))
+        path = plot_with_matplotlib(
+            spec, args.output, args.title, tuple(args.blue), energy_window
+        )
         print(f"✅ Spectrum saved: {path} (matplotlib)")
     except ImportError:
-        path = plot_with_pillow(spec, args.output, args.title, tuple(args.blue))
+        path = plot_with_pillow(
+            spec, args.output, args.title, tuple(args.blue), energy_window
+        )
         print(f"✅ Spectrum saved: {path} (Pillow)")
     
     # Print peak info
     ev = spec['energy_ev']
     wl = spec['wavelength']
     emi = [max(v, 0) for v in spec['fc_emi']]
-    emi_norm = [v / max(emi) for v in emi]
+    emission_max = max(emi, default=0.0)
+    if emission_max <= 0:
+        raise ValueError("Spectrum has no positive emission intensity")
+    emi_norm = [v / emission_max for v in emi]
     
     peaks = []
     for i in range(1, len(emi_norm)-1):

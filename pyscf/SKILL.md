@@ -1,260 +1,229 @@
 ---
 name: pyscf
-description: Use when building, reviewing, or troubleshooting PySCF calculations for HF, DFT, correlated wavefunction methods, excited states, geometry optimization, PES scans, or spectroscopy.
+description: Use when defining, running, validating, or reporting molecular PySCF HF, DFT, or linear-response calculations with explicit state, units, convergence, and software provenance.
 license: MIT
-compatibility: Requires Python and PySCF; optional workflows require additional optimizer, plotting, or accelerator packages.
+compatibility: Requires Python 3 and a separately installed PySCF environment; optional methods, optimizers, accelerators, and plugins require their own version-specific validation.
 ---
 
 # PySCF
 
-## Overview
+Use this skill to build a small, traceable calculation from documented PySCF
+core APIs. Choose a method only after defining the physical quantity. A finite
+energy is not an acceptance criterion, and a bundled historical prototype is
+not evidence that an API is supported.
 
-Use this skill to turn a quantum-chemistry question into a traceable PySCF
-calculation. The installed PySCF version and its documentation are authoritative;
-examples here are starting points, not evidence that a method is appropriate for
-a particular system.
+## Prerequisites
 
-**Core rule:** define the physical quantity first, run the smallest defensible
-calculation, and reject unconverged or ambiguously defined results.
-
-Install the selected environment explicitly:
+Create an isolated environment, install the intended PySCF build, and record
+the exact interpreter and PySCF version:
 
 ```bash
-python -m pip install pyscf
-python -c "import pyscf; print(pyscf.__version__)"
+python3 -m pip install pyscf
+python3 -c 'import platform, pyscf; print(platform.python_version(), pyscf.__version__)'
 ```
 
-## When to Use
+Before production work, also record BLAS/backend information, thread settings,
+hardware, and optional plugin versions. Do not assume that an example written
+for one PySCF version is compatible with another.
 
-Use this skill for:
+The only supported bundled executable is
+[`scripts/run_safe_dft_tda.py`](scripts/run_safe_dft_tda.py), an intentionally
+narrow closed-shell RKS/TDA runner. The files under `tools/`, the old
+`scripts/dft_calculation.py`, and executable examples under `references/` are
+historical prototypes. Their direct CLIs fail closed; see
+[legacy status](tools/README.md).
 
-- molecular HF or Kohn-Sham DFT;
-- MP2, coupled-cluster, CASCI, CASSCF, or related post-SCF work;
-- TDA, TDHF, or TDDFT excited states;
-- gradients, geometry optimization, Hessians, or PES scans;
-- periodic PySCF workflows;
-- review of PySCF inputs, outputs, units, convergence, and provenance.
+## Input contract
 
-Do not use a molecular PySCF template unchanged for periodic systems, unsupported
-relativistic Hamiltonians, multireference states, or production benchmarks.
-Route those cases to the relevant specialized API and validate the method first.
+Define these fields before constructing `gto.M`:
 
-## Non-Negotiable Scientific Boundaries
+- target quantity and comparison being made;
+- structure identifier, geometry source, atom order, and coordinate units;
+- total charge and spin, where PySCF `spin = Nalpha - Nbeta = 2S`, not the
+  multiplicity;
+- electronic state and restricted, restricted-open-shell, or unrestricted
+  reference choice;
+- Hamiltonian, method or XC functional, orbital basis, auxiliary basis, ECP,
+  relativistic treatment, solvent/environment, and symmetry choice;
+- SCF threshold, maximum cycles, DFT grid, memory, thread count, checkpoint,
+  and all downstream method controls;
+- output directory, overwrite policy, and intended unit conversions.
 
-Before reporting a result:
+Reject an input when the electron count is non-positive, `Nalpha` or `Nbeta`
+would be negative/non-integral, the charge and spin parity is inconsistent, a
+basis/ECP assignment is missing, or the geometry units are unknown.
 
-1. Record geometry source and coordinate unit, charge, and `spin = Nalpha - Nbeta = 2S`.
-2. Record state/root, method, functional, basis/ECP, numerical grid, solvent model,
-   thresholds, PySCF version, and relevant optional backends.
-3. Check SCF and every downstream convergence flag that the selected method exposes.
-4. Keep total energies, excitation energies, gaps, and correlation energies distinct.
-5. Track excited-state character during scans or optimization; a root number alone
-   does not prove state identity.
-6. Treat density fitting, finite grids, frozen cores, ECPs, and truncated active
-   spaces as declared approximations.
-7. Never label an optimization as a minimum or transition state without an
-   appropriate stationary-point and vibrational analysis.
+The supported runner accepts exactly these JSON fields: `atom`, `unit`,
+`basis`, `charge`, `spin`, `xc`, `grid_level`, `conv_tol`, `max_cycle`, and
+`nstates`. It rejects unknown or missing fields, non-finite controls, ambiguous
+units, and nonzero `spin`. That last restriction is a runner boundary, not a
+claim that PySCF lacks open-shell methods.
 
-If any required definition or convergence evidence is missing, return the result
-as incomplete rather than filling in a plausible value.
+## Workflow
 
-## Core Workflow
+### 1. Prepare one explicit configuration
 
-### 1. Define the target
+For a small interface test, save a JSON object such as:
 
-Specify the quantity and reference state before choosing code:
+```json
+{
+  "atom": "H 0.0 0.0 0.0; H 0.0 0.0 0.74",
+  "unit": "Angstrom",
+  "basis": "sto-3g",
+  "charge": 0,
+  "spin": 0,
+  "xc": "pbe0",
+  "grid_level": 3,
+  "conv_tol": 1e-9,
+  "max_cycle": 80,
+  "nstates": 2
+}
+```
 
-- electronic total energy or relative energy;
-- vertical or adiabatic excitation/emission energy;
-- optimized geometry or stationary-point class;
-- response property, spectrum, population, or orbital diagnostic;
-- rigid or relaxed PES, including which coordinates are constrained.
+This is an interface example, not a recommended scientific protocol. Select and
+converge the functional, basis, grid, state count, and thresholds for the
+actual quantity.
 
-### 2. Build and validate the molecule
+### 2. Run only into a fresh directory
+
+```bash
+python3 scripts/run_safe_dft_tda.py \
+  --config h2-pbe0.json \
+  --output h2-pbe0-run
+```
+
+The runner creates the output directory with `exist_ok=False`. Before importing
+PySCF it writes the exact input copy and a `run_manifest.partial.json` whose
+state is `running`. A failure changes that partial manifest to `failed` and
+never publishes accepted results. Acceptance atomically publishes
+`results.json` and `run_manifest.json`, removes the partial manifest, and stores
+the elapsed time, Python/PySCF version, and SHA-256 hashes for the result,
+checkpoint, and log.
+
+### 3. Apply every acceptance gate
+
+The supported runner sets the checkpoint before SCF, rejects unconverged SCF,
+and requires finite SCF energy, orbital energies, orbital coefficients, and
+occupations. The energy returned by `mf.kernel()` must match `mf.e_tot` within
+`1e-10` Hartree. Every RKS occupation must lie in `[0, 2]`, and their sum must
+match `mol.nelectron` within `1e-8` electrons. The checkpoint must exist and be
+non-empty before TDA begins. The runner then requires PySCF's internal and
+external restricted-SCF stability statuses to both be true; an unavailable,
+malformed, or unstable result remains a failed partial run and never reaches
+TDA or accepted publication.
+
+For TDA, all three returned vectors must be one-dimensional, finite, exact, and
+inside the accepted physical domain:
 
 ```python
-from pyscf import gto
-
-mol = gto.M(
-    atom="H 0.0 0.0 0.0; F 0.0 0.0 0.92",
-    unit="Angstrom",
-    basis="def2-svp",
-    charge=0,
-    spin=0,
-    symmetry=False,
-    verbose=4,
-)
-
-assert mol.nelectron > 0
-assert mol.nelectron % 2 == mol.spin % 2
+len(td.converged) == td.nstates
+len(td.e) == td.nstates
+len(oscillator_strength) == td.nstates
+all(td.converged)
+all(value > 0.0 for value in td.e)
+all(value >= 0.0 for value in oscillator_strength)
 ```
 
-Use an explicit coordinate unit. Confirm the electron count, charge, spin, atom
-order, basis availability, and ECP assignment before launching an expensive job.
+Returning fewer roots than requested is a failed run, even if every returned
+root converged. Zero or negative excitation energies and negative oscillator
+strengths also fail the run and cannot reach accepted result publication. Use
+`td.oscillator_strength()`; do not substitute an undocumented `td.f` attribute.
+`td.e[i]` is an excitation energy in Hartree, not a total energy or an emission
+result.
 
-### 3. Establish a converged reference
+### 4. Extend only behind a new tested boundary
 
-```python
-from pyscf import dft
+For open-shell references, MP2, CC, multireference, gradients, geometry
+optimization, solvent, periodic, relativistic, GPU, or other response
+workflows, consult the official module documentation and installed examples.
+Add a separate version-pinned runner and RED-to-GREEN contract tests before
+advertising support. Do not re-enable a historical CLI as a shortcut.
 
-mf = dft.RKS(mol)
-mf.xc = "pbe0"
-mf.grids.level = 4
-mf.conv_tol = 1e-9
-mf.max_cycle = 100
-energy_hartree = mf.kernel()
+## Validation and acceptance
 
-if not mf.converged:
-    raise RuntimeError("SCF did not converge; do not use downstream properties")
+Accept a molecular result only when all applicable checks pass:
 
-print(f"E = {energy_hartree:.12f} Eh")
-```
+- atom order, geometry source, units, charge and spin reproduce the manifest;
+- electron parity and basis/ECP coverage are valid;
+- the intended restricted/open-shell reference was actually constructed;
+- `mf.converged` is true and the final energy and orbitals are finite;
+- occupations, symmetry, `<S^2>`, and stability are appropriate for the state;
+- every downstream method/root reports its own convergence status;
+- every accepted TDA root has a strictly positive excitation energy in Hartree
+  and a non-negative oscillator strength;
+- basis, DFT grid, reference, and numerical sensitivity support the reported
+  precision;
+- checkpoint and output hashes resolve to the accepted run;
+- the report contains the Python and PySCF version and all units.
 
-Use RHF/RKS only for an appropriate closed-shell reference. For an open-shell
-system, choose ROHF/UHF or ROKS/UKS deliberately and inspect spin contamination,
-orbital occupations, and possible broken-symmetry solutions.
+For spectra, record whether transitions are absorption or emission, state/root,
+oscillator-strength convention, line shape, width, energy grid, and
+normalization. A ground-geometry vertical excitation is not an emission
+calculation.
 
-### 4. Add one downstream layer at a time
+## Failure handling
 
-Choose the least complex method that answers the stated question:
+- SCF failure: recheck geometry, units, charge and spin first; inspect guesses,
+  occupations, and competing solutions before trying damping, level shifting,
+  or Newton SCF.
+- Different solutions from different guesses: run stability analysis and
+  characterize each solution; do not select only by convergence speed.
+- Unexpected spin contamination: retain the failed result and compare justified
+  restricted-open-shell/unrestricted references.
+- Response root failure or reordering: increase diagnostics and track physical
+  character; never substitute another root silently.
+- Unsupported attribute/import/API: classify the script as incompatible with
+  the installed PySCF version and consult official documentation. Do not guess a
+  replacement API.
+- Optimization or frequency failure: separate electronic convergence from the
+  optimizer/Hessian status. Do not label a stationary point without compatible
+  vibrational analysis.
+- Memory failure: estimate tensor sizes and consider a smaller basis, direct or
+  density-fitted algorithm, or frozen-core approximation only as a declared
+  protocol change.
 
-| Question | Starting family | Required checks |
-|---|---|---|
-| Closed-shell mean-field baseline | RHF or RKS | SCF convergence, stability, basis/grid convergence |
-| Open-shell baseline | ROHF/UHF or ROKS/UKS | `<S^2>`, occupations, stability |
-| Dynamic correlation | MP2 or CC methods | reference quality, frozen-core choice, basis convergence |
-| Strong static correlation | CASCI/CASSCF | active-space definition, roots, occupations |
-| Single-excitation-dominated states | TDA/TDHF/TDDFT | ground-state quality, root convergence and character |
-| Periodic material | `pyscf.pbc` | cell, k mesh, Coulomb treatment, finite-size convergence |
+Return `failed` or `not_computed` for missing validation. Preserve logs and
+partial artifacts, but exclude them from accepted result tables.
 
-Do not infer that a functional, basis, or method is accurate because it is listed.
-Benchmark or justify it for the target property and chemical regime.
+## Output and reporting
 
-### 5. Verify, then report
+Report, at minimum:
 
-Perform a cheaper smoke test first, followed by systematic convergence or method
-checks that can change the conclusion. Save inputs, output, checkpoints, software
-versions, and a compact table of assumptions and results.
+- structure ID/hash, geometry source, atom count, and coordinate units;
+- charge and spin (`Nalpha - Nbeta`), multiplicity label, state, and reference;
+- method/XC, basis/ECP, grid, solvent/environment, thresholds, and
+  approximations;
+- Python and PySCF version, plugins, backend, threads, memory, hardware, command,
+  and elapsed time;
+- convergence flags, stability/spin diagnostics, warnings, and failed attempts;
+- total energies in Hartree; each converted value with one named conversion;
+- excitation energies and oscillator strengths separately from total energies;
+- checkpoint/log/result paths and hashes;
+- sensitivity checks, limitations, and any `not_computed` properties.
 
-See [workflow and safety details](references/theory/workflow-and-safety.md) for the
-full decision checklist.
-
-## Excited States
-
-Start from a converged ground-state reference. TDA is often a useful diagnostic,
-but it is not universally more accurate than full TDDFT.
-
-```python
-from pyscf import lib
-
-td = mf.TDA()
-td.nstates = 5
-td.kernel()
-
-if not all(td.converged):
-    raise RuntimeError("One or more requested excited states did not converge")
-
-excitation_ev = td.e * lib.param.HARTREE2EV
-oscillator_strength = td.oscillator_strength()
-nto_weights, nto_coeff = td.get_nto(state=1)  # one-based state index
-
-s1_total_energy_hartree = mf.e_tot + td.e[0]
-```
-
-Keep these quantities separate:
-
-- `mf.e_tot`: ground-state total energy in Hartree;
-- `td.e[i]`: excitation energy relative to that reference in Hartree;
-- `mf.e_tot + td.e[i]`: corresponding excited-state total-energy estimate;
-- `td.oscillator_strength()`: dimensionless oscillator strength.
-
-For spectra, document line shape, width, energy grid, temperature or environment,
-and whether the sticks are absorption or emission transitions. Do not call a
-ground-geometry excitation an emission calculation.
-
-## Geometry, Frequencies, and PES
-
-- Confirm that analytic gradients/Hessians exist for the exact method and state.
-- Geometry optimizers are optional integrations; install and record the selected
-  optimizer separately.
-- Check both electronic convergence and optimizer termination at every geometry.
-- Convert a mass-weighted Hessian to frequencies with the correct units; raw
-  Hessian eigenvalues are not frequencies in `cm^-1`.
-- For an excited-state optimization, use a state-specific gradient scanner and
-  monitor state character for root flips or crossings.
-- For a PES, state whether each point is rigid or relaxed, preserve constraints,
-  and compute the full energy at every geometry.
-- An S1 PES uses `E_S1(R) = E_S0(R) + omega_S1(R)`, not `omega_S1(R)` alone.
-
-Use the dedicated [2D PES guide](references/practice/2d-potential-energy-surface.md)
-and [emission workflow](references/practice/emission-spectrum-workflow.md) before
-adapting those calculations.
-
-## Units and Numerical Meaning
-
-| Quantity | Typical PySCF value | Reporting requirement |
-|---|---|---|
-| Electronic energy | Hartree (`Eh`) | State the conversion used for eV or kJ/mol |
-| TD excitation energy | Hartree | Convert once; do not mix with total energy |
-| Nuclear gradient | `Eh/Bohr` | Match optimizer and coordinate conventions |
-| Input coordinates | User-selected | Set `unit` explicitly |
-| Electric dipole | Atomic units | State conversion if reporting Debye |
-| Oscillator strength | Dimensionless | Keep state index and gauge/protocol |
-
-Useful constants are exposed by `pyscf.lib.param`; avoid copying rounded constants
-through multiple post-processing layers.
-
-## Convergence and Failure Handling
-
-| Symptom | Safe response |
-|---|---|
-| SCF oscillates or stalls | Recheck charge/spin/geometry; inspect occupations; then test damping, level shift, a new guess, or Newton SCF |
-| Different guesses give different energies | Run stability analysis and characterize competing solutions |
-| Open-shell result has unexpected `<S^2>` | Inspect spin contamination and compare appropriate restricted/open-shell references |
-| TD roots reorder | Track transition character/NTOs, not only root number |
-| Optimization stops unexpectedly | Inspect electronic convergence, gradients, constraints, and optimizer status |
-| Memory is exhausted | Estimate tensor sizes; consider density fitting, direct algorithms, frozen cores, or smaller tests |
-| Result changes with grid/basis | Report the convergence study; do not select the preferred value silently |
-
-Changing the Hamiltonian or electronic-structure method is a scientific decision,
-not merely a convergence fix. Keep failed attempts and their diagnostics in the
-calculation record.
-
-## Performance and Restart
-
-- Set thread counts before expensive work and record them with hardware/backend.
-- Use `max_memory` and estimate AO/MO integral storage before post-HF jobs.
-- Density fitting can reduce cost, but validate its error for the target observable.
-- Save checkpoints for restart; verify that the loaded molecule, orbitals, method,
-  and basis match the intended calculation.
-- Benchmark with a fixed geometry, method, basis, thread count, and warm-up policy.
-
-## Included Tools
-
-| Script | Intended starting point |
-|---|---|
-| `tools/scf.py` | HF/DFT reference calculations |
-| `tools/dft.py` | DFT setup and comparison |
-| `tools/tddft.py` | TDA/TDDFT calculations |
-| `tools/mp2.py` | MP2 calculations |
-| `tools/ccsd.py` | CCSD and perturbative triples |
-| `tools/cascf.py` | Active-space workflows |
-| `tools/geometry.py` | Optimization, transition states, and frequencies |
-| `tools/pes.py` | One- and two-dimensional scans |
-| `tools/spectrum.py` | Spectrum post-processing |
-| `tools/analysis.py` | Population, orbital, and wavefunction analysis |
-
-Inspect a script before use. Its presence does not establish method support,
-scientific validity, or compatibility with the installed PySCF version.
+Keep theoretical interpretation, implementation status, and measured output
+separate. Never describe an unexecuted example as a computed result.
 
 ## References
 
-- [Workflow, method selection, convergence, and reporting safety](references/theory/workflow-and-safety.md)
-- [Detailed PySCF API reference](references/theory/pyscf-api-reference.md)
-- [Advanced methods, integrals, periodic systems, and performance](references/theory/pyscf-advanced.md)
-- [PySCF and JAX integration](references/theory/pyscf-jax-integration.md)
-- [Two-dimensional potential-energy surfaces](references/practice/2d-potential-energy-surface.md)
-- [Emission-spectrum guide](references/practice/emission-spectrum-guide.md)
-- [Emission-spectrum workflow](references/practice/emission-spectrum-workflow.md)
-- [Benzene DFT and TDDFT example](references/benzene-dft-tddft.py)
-- [Version notes](VERSION_UPDATE.md)
+- [Official PySCF quickstart](https://pyscf.org/quickstart.html)
+- [Official SCF user guide](https://pyscf.org/user/scf.html)
+- [Official DFT user guide](https://pyscf.org/user/dft.html)
+- [Official TD-SCF API](https://pyscf.org/pyscf_api_docs/pyscf.tdscf.html)
+- [Official density-fitting guide](https://pyscf.org/user/df.html)
+- [Repository scientific-safety checklist](references/theory/workflow-and-safety.md)
+- [Status of bundled legacy tools and references](tools/README.md)
+
+Quarantined historical material is linked here for repository completeness,
+not as an executable or authoritative API guide:
+
+- [Historical version note](VERSION_UPDATE.md)
+- [Historical 2D PES draft](references/practice/2d-potential-energy-surface.md)
+- [Historical emission guide](references/practice/emission-spectrum-guide.md)
+- [Historical emission workflow](references/practice/emission-spectrum-workflow.md)
+- [Historical advanced-API draft](references/theory/pyscf-advanced.md)
+- [Historical API-reference draft](references/theory/pyscf-api-reference.md)
+- [Historical JAX-integration draft](references/theory/pyscf-jax-integration.md)
+
+Do not execute those historical documents until each call, unit convention, and
+failure path has been verified against the installed PySCF version.

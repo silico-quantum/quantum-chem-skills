@@ -17,11 +17,16 @@ not establish that the two checked-in images differ.
 
 See [`../../examples/xyzrender/`](../../examples/xyzrender/) for the complete files.
 
-## xTB Cluster MD Animations
+## Rejected Historical xTB Cluster MD Animations
 
-- **COM motion** — Center-of-mass trajectory overview
+- **Legacy `benzene_com.gif`** — Arithmetic coordinate-centroid motion, not
+  center-of-mass motion despite the filename
 - **Full atom** — All atoms colored by molecule index
 - **Local cluster** — Subset with bond drawing
+
+The retained logs contain a thermostat problem and runtime exception, while
+the original trajectory and `xtbmdok` marker are absent. These GIFs are visual
+artifacts from a rejected historical run, not accepted MD evidence.
 
 See [`../../examples/xtb-cluster-md/`](../../examples/xtb-cluster-md/) for the GIF files.
 

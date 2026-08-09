@@ -1,0 +1,4 @@
+interface:
+  display_name: "xyzrender Molecular Graphics"
+  short_description: "Render auditable molecular figures and animations"
+  default_prompt: "Use $xyzrender to create a validated molecular graphic with explicit input and bond provenance."

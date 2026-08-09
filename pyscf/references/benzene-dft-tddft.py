@@ -2,6 +2,14 @@
 """PySCF Benzene: DFT + TDDFT (PySCF 2.12.1)
 Tested: 2026-03-27 on macOS arm64, PySCF 2.12.1, Python 3.14
 """
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "tools"))
+from _legacy_guard import refuse_direct_execution as _refuse_direct_execution
+
+_refuse_direct_execution(__file__)
+
 from pyscf import gto, dft, tdscf
 from pyscf.tools import cubegen
 from pyscf import solvent

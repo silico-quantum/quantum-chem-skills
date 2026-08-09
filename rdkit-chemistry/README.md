@@ -1,307 +1,123 @@
-# RDKit Chemistry Analysis Skill
+# RDKit Chemistry Skill
 
-<div align="center">
+This skill provides a fail-closed workflow for molecular parsing, conformer
+generation, force-field relaxation, descriptors, empirical charges, and
+structure interchange with RDKit.
 
-![RDKit](https://img.shields.io/badge/RDKit-2023.03+-blue)
-![Python](https://img.shields.io/badge/Python-3.8+-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+Read [`SKILL.md`](SKILL.md) before using a generated structure in a scientific
+workflow. Installing this skill does not install RDKit, PySCF, xyzrender, or
+other optional software.
 
-**Molecular structure analysis and visualization using RDKit**
+## Scope
 
-[Features](#features) • [Quick Start](#quick-start) • [Examples](#examples) • [Documentation](#documentation)
+The supported guidance covers:
 
-</div>
+- sanitized SMILES or file parsing with explicit failure checks;
+- stereochemistry inspection and policy for unassigned centers;
+- reproducible ETKDGv3 conformer generation with a recorded seed;
+- MMFF94 or UFF parameter-coverage and convergence checks;
+- finite-coordinate validation and sanitized SDF round trips;
+- documented RDKit descriptors and finite Gasteiger charges; and
+- provenance for source structures, transformations, versions, and outputs.
 
----
-
-## Showcase: Benzene (C₆H₆) Visualization
-
-### 🎨 2D Structure
-
-<p align="center">
-  <img src="examples/benzene_showcase_2d.png" width="400" title="2D Structure">
-  <img src="examples/benzene_showcase_2d_h.png" width="400" title="2D with Hydrogens">
-</p>
-
-**Left**: Clean 2D representation  
-**Right**: With explicit hydrogens
-
----
-
-### 🔬 Charge Distribution (Gasteiger)
-
-<p align="center">
-  <img src="examples/benzene_showcase_charges.png" width="600" title="Charge Distribution">
-</p>
-
-**Color mapping**:
-- 🔴 **Red** → Negative charge (C atoms: -0.062)
-- ⚪ **White** → Neutral
-- 🔵 **Blue** → Positive charge (H atoms: +0.062)
-
----
-
-### 💠 Aromatic System
-
-<p align="center">
-  <img src="examples/benzene_showcase_aromatic.png" width="400" title="Aromatic System">
-</p>
-
-**Aromatic ring** highlighted in blue
-
----
-
-### 🧊 3D Structure (xyzrender)
-
-<p align="center">
-  <img src="examples/benzene_showcase_3d.png" width="500" title="3D Structure">
-</p>
-
-**Rendered with xyzrender** (transparent background, bond orders shown)
-
----
-
-### 📊 Molecular Descriptors
-
-```text
-Molecular formula:  C6H6
-Molecular weight:   78.11 Da
-LogP:               1.69
-TPSA:               0.00 Å²
-H-bond donors:      0
-H-bond acceptors:   0
-Rotatable bonds:    0
-Aromatic rings:     1
-```
-
----
-
-## Features
-
-✅ **3D Conformer Generation**
-- ETKDG algorithm
-- MMFF94/UFF force field optimization
-- Energy minimization
-
-✅ **Molecular Descriptors**
-- LogP, TPSA, molecular weight
-- Hydrogen bonding (donors/acceptors)
-- Rotatable bonds
-- Aromatic ring detection
-
-✅ **Charge Calculation**
-- Gasteiger charges (empirical, fast)
-- Mulliken charges (with PySCF)
-
-✅ **Non-Covalent Interactions**
-- π-π stacking analysis
-- Hydrogen bond identification
-- Donor-acceptor analysis (TADF)
-
-✅ **Visualization**
-- 2D structures with highlighting
-- 3D rendering (xyzrender)
-- Charge distribution maps
-- Aromatic system visualization
-
-✅ **Integration**
-- PySCF for DFT calculations
-- xyzrender for 3D visualization
-- Multiwfn for wavefunction analysis
-
----
-
-## Quick Start
-
-### 1. Basic Molecular Analysis
-
-```python
-from rdkit import Chem
-from rdkit.Chem import AllChem, Descriptors
-
-# Build molecule
-mol = Chem.MolFromSmiles("c1ccccc1")  # Benzene
-mol = Chem.AddHs(mol)
-
-# Generate 3D conformer
-AllChem.EmbedMolecule(mol, AllChem.ETKDG())
-AllChem.MMFFOptimizeMolecule(mol)
-
-# Calculate descriptors
-print(f"MW: {Descriptors.ExactMolWt(mol):.2f}")
-print(f"LogP: {Descriptors.MolLogP(mol):.2f}")
-print(f"TPSA: {Descriptors.TPSA(mol):.2f}")
-```
-
-### 2. Charge Calculation
-
-```python
-AllChem.ComputeGasteigerCharges(mol)
-
-for atom in mol.GetAtoms():
-    charge = float(atom.GetProp('_GasteigerCharge'))
-    print(f"{atom.GetSymbol()}: {charge:.3f}")
-```
-
-### 3. Visualization
-
-```python
-from rdkit.Chem.Draw import rdMolDraw2D
-
-# 2D structure
-drawer = rdMolDraw2D.MolDraw2DCairo(800, 800)
-drawer.DrawMolecule(mol)
-drawer.FinishDrawing()
-drawer.WriteDrawingText("molecule.png")
-```
-
-### 4. 3D Rendering (with xyzrender)
-
-```python
-# Export to SDF
-writer = Chem.SDWriter("molecule.sdf")
-writer.write(mol)
-writer.close()
-
-# Then in shell:
-# xyzrender molecule.sdf -o molecule.png --transparent --bo
-```
-
----
-
-## Examples
-
-See `examples/` directory:
-
-- **`demo_molecule_opt.py`** - Conformer generation and optimization
-- **`molecular_descriptors.py`** - Descriptor calculation and analysis
-- **`nci_visualization.py`** - Non-covalent interaction analysis
-- **`advanced_quantum_calc.py`** - Combining RDKit with PySCF
-- **`benzene_showcase.py`** - Complete visualization showcase (this example)
-
----
+RDKit conformers and force-field energies are preparation or screening results.
+They are not quantum-chemical geometries, crystal-packing evidence, or a basis
+for inferring pi stacking, noncovalent interaction energies, ESP/RDG fields, or
+TADF mechanisms.
 
 ## Installation
 
-### Using conda (recommended)
+Use an isolated environment and record the installed version:
 
 ```bash
 conda install -c conda-forge rdkit
+python -c "from rdkit import rdBase; print(rdBase.rdkitVersion)"
 ```
 
-### Using pip
+The upstream project also publishes a pip package:
 
 ```bash
-pip install rdkit
+python -m pip install rdkit
 ```
 
-### Optional dependencies
+Optional PySCF or rendering demonstrations require their own independently
+validated environments.
 
-```bash
-# For DFT calculations
-pip install pyscf
-
-# For 3D visualization
-pip install xyzrender
-```
-
----
-
-## Documentation
-
-- **SKILL.md** - Complete skill documentation
-- **README.md** - This file
-- **examples/** - Example scripts
-
-### Common Patterns
-
-#### Pattern 1: Quick Analysis
+## Safe Interface Example
 
 ```python
-def analyze_molecule(smiles):
-    mol = Chem.MolFromSmiles(smiles)
-    mol = Chem.AddHs(mol)
-    
-    AllChem.EmbedMolecule(mol, AllChem.ETKDG())
-    AllChem.MMFFOptimizeMolecule(mol)
-    
-    return {
-        'MW': Descriptors.ExactMolWt(mol),
-        'LogP': Descriptors.MolLogP(mol),
-        'TPSA': Descriptors.TPSA(mol),
-    }
+import math
+
+from rdkit import Chem, rdBase
+from rdkit.Chem import AllChem
+
+source_smiles = "C[C@H](O)c1ccccc1"
+mol = Chem.MolFromSmiles(source_smiles)
+if mol is None:
+    raise ValueError("SMILES parsing or sanitization failed")
+
+stereo = Chem.FindMolChiralCenters(
+    mol, includeUnassigned=True, useLegacyImplementation=False
+)
+if any(label == "?" for _, label in stereo):
+    raise ValueError("Resolve or explicitly accept unassigned stereochemistry")
+
+canonical_smiles = Chem.MolToSmiles(mol, isomericSmiles=True)
+mol = Chem.AddHs(mol)
+
+parameters = AllChem.ETKDGv3()
+parameters.randomSeed = 0xF00D
+parameters.numThreads = 1
+parameters.enforceChirality = True
+conformer_id = AllChem.EmbedMolecule(mol, parameters)
+if conformer_id < 0:
+    raise RuntimeError("ETKDG embedding failed")
+
+if not AllChem.MMFFHasAllMoleculeParams(mol):
+    raise RuntimeError("MMFF94 does not cover every atom")
+status = AllChem.MMFFOptimizeMolecule(
+    mol, confId=conformer_id, maxIters=1000, mmffVariant="MMFF94"
+)
+if status != 0:
+    raise RuntimeError(f"MMFF94 optimization did not converge: status={status}")
+
+coordinates = mol.GetConformer(conformer_id).GetPositions()
+if not all(math.isfinite(value) for row in coordinates for value in row):
+    raise RuntimeError("Conformer contains a non-finite coordinate")
+
+print(rdBase.rdkitVersion, canonical_smiles, conformer_id)
 ```
 
-#### Pattern 2: Batch Screening
+This snippet demonstrates interface checks only. The complete skill also
+requires nonbonded-contact review, coordinate-derived stereochemistry checks,
+fresh output paths, SDF round-trip validation, checksums, and an explicit
+report.
 
-```python
-smiles_list = ["SMILES1", "SMILES2", "SMILES3"]
+## Bundled Examples
 
-for smiles in smiles_list:
-    mol = Chem.MolFromSmiles(smiles)
-    # ... analysis
-```
+[`examples/`](examples/) contains historical demonstration molecules and saved
+figures from prior environments. Their Python files are quarantined and exit
+before importing scientific packages or writing outputs because they do not
+satisfy this skill's current fail-closed contract. Retain them for static review
+only; implement a new workflow from `SKILL.md` in a fresh run directory.
 
----
+In particular, any replacement workflow that invokes PySCF or xyzrender crosses
+into separate software boundaries. Its outputs must satisfy those tools' own
+state, units, convergence, version, and provenance contracts.
 
-## Integration with Other Tools
+## Acceptance Boundary
 
-### PySCF (DFT calculations)
-
-```python
-from pyscf import gto, dft
-
-# Convert RDKit mol to PySCF format
-coords = []
-conf = mol.GetConformer()
-
-for atom in mol.GetAtoms():
-    pos = conf.GetAtomPosition(atom.GetIdx())
-    coords.append(f"{atom.GetSymbol()} {pos.x:.6f} {pos.y:.6f} {pos.z:.6f}")
-
-xyz = "\n".join(coords)
-mol_pyscf = gto.M(atom=xyz, basis='6-31G')
-
-mf = dft.RKS(mol_pyscf)
-mf.xc = 'B3LYP'
-mf.kernel()
-```
-
-### xyzrender (3D visualization)
-
-```bash
-xyzrender molecule.sdf -o molecule.png --transparent --bo
-```
-
----
-
-## Requirements
-
-- Python >= 3.8
-- RDKit >= 2023.03
-- (Optional) PySCF >= 2.0
-- (Optional) xyzrender >= 1.0
-
----
-
-## License
-
-MIT
-
----
+Do not accept an RDKit-generated structure unless parsing/sanitization,
+stereochemistry, embedding, parameter coverage, optimization status, finite
+coordinates, nonbonded-contact checks, and sanitized output round trip all pass.
+Record the exact source, canonical isomeric SMILES, formal charge, radicals,
+RDKit version, seed, conformer selection rule, force field, energy units,
+warnings, output path, and SHA-256.
 
 ## References
 
-- RDKit Documentation: https://www.rdkit.org/docs/
-- MMFF94 Paper: Halgren, J. Comput. Chem. 1996, 17, 490-519
-- Gasteiger Charges: Gasteiger & Marsili, Tetrahedron 1980, 36, 3219-3228
+- [RDKit getting started guide](https://www.rdkit.org/docs/GettingStartedInPython.html)
+- [RDKit Python API](https://www.rdkit.org/docs/api-docs.html)
+- [RDKit book](https://www.rdkit.org/docs/RDKit_Book.html)
 
----
-
-<div align="center">
-
-**Created by Silico (AI Agent)** 🔮
-
-*Part of the [quantum-chem-skills](https://github.com/silico-quantum/quantum-chem-skills) collection*
-
-</div>
+Released under the repository [MIT License](../LICENSE).

@@ -6,13 +6,54 @@ import os
 import sys
 import subprocess
 import argparse
+import math
+import re
 from pathlib import Path
 
 TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
+_RATE_NUMBER = r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?'
+_RATE_UNIT = r's(?:\^-1|-1|⁻¹)'
+_FATAL_DIAGNOSTIC_PATTERN = re.compile(
+    r'\bfatal\b|segmentation fault|error termination|\baborted\b|'
+    r'traceback \(most recent call last\)|forrtl:',
+    flags=re.IGNORECASE,
+)
+_SUPPORTED_MOMAP_BUILD = '2024A'
 
 # ─── isc_tvcf ───────────────────────────────────────────────────────────
-def generate_isc_input(evc_dat, ead_au, hso_cm1, output='momap_isc.inp', temp=298, tmax=5000):
+def _finite_positive(name, value):
+    if isinstance(value, bool):
+        raise ValueError(f'{name} must be a finite positive number')
+    try:
+        value = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{name} must be a finite positive number') from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f'{name} must be a finite positive number')
+    return value
+
+
+def generate_isc_input(
+    evc_dat,
+    ead_au,
+    hso_cm1,
+    output='momap_isc.inp',
+    temp=298,
+    tmax=5000,
+):
     """Generate isc_tvcf input for phosphorescence spectrum + k_ISC."""
+    evc_path = Path(evc_dat).expanduser().resolve(strict=True)
+    if not evc_path.is_file() or evc_path.stat().st_size <= 0:
+        raise ValueError(f'evc_dat must be a non-empty regular file: {evc_path}')
+    ead_au = _finite_positive('ead_au', ead_au)
+    hso_cm1 = _finite_positive('hso_cm1', hso_cm1)
+    temp = _finite_positive('temp', temp)
+    tmax = _finite_positive('tmax', tmax)
+    output_path = Path(output).expanduser().resolve()
+    if output_path.exists():
+        raise FileExistsError(f'Refusing to overwrite existing output: {output_path}')
+    if not output_path.parent.is_dir():
+        raise FileNotFoundError(f'Output parent does not exist: {output_path.parent}')
     content = f"""do_isc_tvcf_ft   = 1
 do_isc_tvcf_spec = 1
 
@@ -23,28 +64,101 @@ do_isc_tvcf_spec = 1
   dt      = 0.001 fs
   Ead     = {ead_au:.8f} au
   Hso     = {hso_cm1:.6f} cm-1
-  DSFile  = "{evc_dat}"
+  DSFile  = "{evc_path}"
   Emax    = 0.3 au
   logFile = "isc.tvcf.log"
   FtFile  = "isc.tvcf.ft.dat"
   FoFile  = "isc.tvcf.fo.dat"
 /
 """
-    with open(output, 'w') as f:
+    with open(output_path, 'x', encoding='utf-8') as f:
         f.write(content)
-    return output
+    return output_path
 
 
-def parse_isc_output(fo_file='isc.tvcf.fo.dat'):
-    """Parse isc_tvcf output for k_ISC and k_RISC."""
-    with open(fo_file) as f:
-        text = f.read()
-    import re
-    k_isc = re.search(r'rate is\s+([\d.E+-]+)\s+s-1', text.split('\n')[0])
-    k_risc = re.search(r'rate is\s+([\d.E+-]+)\s+s-1', text.split('\n')[1])
+def parse_isc_output(fo_file='isc.tvcf.fo.dat', *, expected_build=None):
+    """Parse finite ISC/RISC rates using the local 2024A output contract."""
+    path = Path(fo_file).expanduser().resolve(strict=True)
+    if not path.is_file() or path.stat().st_size <= 0:
+        raise ValueError(f'ISC rate output must be non-empty: {path}')
+    text = path.read_text(encoding='utf-8', errors='replace')
+    fatal_match = _FATAL_DIAGNOSTIC_PATTERN.search(text)
+    if fatal_match:
+        raise ValueError(
+            f'Fatal diagnostic in ISC rate output: {fatal_match.group(0)!r}'
+        )
+
+    explicit_pattern = re.compile(
+        rf'^\s*(ISC|RISC)\b.*?\brate\s+is\s+({_RATE_NUMBER})\s*'
+        rf'{_RATE_UNIT}\s*$',
+        flags=re.IGNORECASE,
+    )
+    unlabeled_pattern = re.compile(
+        rf'^\s*rate\s+is\s+({_RATE_NUMBER})\s*{_RATE_UNIT}\s*$',
+        flags=re.IGNORECASE,
+    )
+    rate_trigger = re.compile(r'\brate\s+is\b', flags=re.IGNORECASE)
+    explicit_records = {'ISC': [], 'RISC': []}
+    unlabeled_records = []
+
+    def parse_value(raw_value, label):
+        value = float(raw_value.replace('D', 'E').replace('d', 'e'))
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f'{label} rate must be finite and non-negative')
+        return value
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not rate_trigger.search(line):
+            continue
+        explicit_match = explicit_pattern.fullmatch(line)
+        if explicit_match:
+            label = explicit_match.group(1).upper()
+            explicit_records[label].append(
+                parse_value(explicit_match.group(2), label)
+            )
+            continue
+        unlabeled_match = unlabeled_pattern.fullmatch(line)
+        if unlabeled_match:
+            unlabeled_records.append(
+                parse_value(unlabeled_match.group(1), 'unlabeled')
+            )
+            continue
+        raise ValueError(
+            f'Malformed or unitless ISC rate record at line {line_number}'
+        )
+
+    explicit_count = sum(len(records) for records in explicit_records.values())
+    if explicit_count:
+        if unlabeled_records:
+            raise ValueError(
+                'ISC rate output mixes explicit labels with unlabeled fallback records'
+            )
+        for label in ('ISC', 'RISC'):
+            count = len(explicit_records[label])
+            if count != 1:
+                raise ValueError(
+                    f'Explicit {label} rate must appear exactly once; found {count}'
+                )
+        return {
+            'k_ISC_s-1': explicit_records['ISC'][0],
+            'k_RISC_s-1': explicit_records['RISC'][0],
+            'rate_parse_contract': 'explicit_ISC_RISC_labels_exactly_once',
+        }
+
+    if len(unlabeled_records) != 2:
+        raise ValueError(
+            'MOMAP 2024A unlabeled fallback requires exactly two rate records '
+            f'with s^-1 units; found {len(unlabeled_records)}'
+        )
+    if expected_build != _SUPPORTED_MOMAP_BUILD:
+        raise ValueError(
+            'The unlabeled ISC/RISC ordering is supported only when '
+            'expected_build is explicitly MOMAP 2024A'
+        )
     return {
-        'k_ISC_s1': float(k_isc.group(1)) if k_isc else None,
-        'k_RISC_s1': float(k_risc.group(1)) if k_risc else None,
+        'k_ISC_s-1': unlabeled_records[0],
+        'k_RISC_s-1': unlabeled_records[1],
+        'rate_parse_contract': 'MOMAP_2024A_ordered_first_ISC_second_RISC',
     }
 
 
@@ -173,7 +287,12 @@ def main():
     p = sub.add_parser('isc', help='Generate isc_tvcf input')
     p.add_argument('--evc-dat', default='evc.cart.dat')
     p.add_argument('--ead', type=float, required=True)
-    p.add_argument('--hso', type=float, default=1.0)
+    p.add_argument(
+        '--hso', type=float, required=True,
+        help='Computed or measured spin-orbit coupling in cm^-1',
+    )
+    p.add_argument('--temp', type=float, default=298, help='Temperature in K')
+    p.add_argument('--tmax', type=float, default=5000, help='Correlation time in fs')
     p.add_argument('-o', default='momap_isc.inp')
 
     p = sub.add_parser('ic', help='Generate ic_tvcf input')
@@ -205,7 +324,14 @@ def main():
         return 1
 
     if args.cmd == 'isc':
-        path = generate_isc_input(args.evc_dat, args.ead, args.hso, args.o)
+        path = generate_isc_input(
+            args.evc_dat,
+            args.ead,
+            args.hso,
+            args.o,
+            temp=args.temp,
+            tmax=args.tmax,
+        )
         print(f"✅ isc_tvcf input → {path}")
     elif args.cmd == 'ic':
         path = generate_ic_input(args.evc_dat, args.nac, args.ead, args.o)

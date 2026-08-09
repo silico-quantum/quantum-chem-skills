@@ -1,15 +1,15 @@
-# Molecular Sampler Benzene Reference
+# Benzene Dimer Sampling Example
 
-Example: extracting benzene molecules from a cluster and sampling oligomers.
+This example is a parser and sampling smoke test, not a claim that the supplied
+geometry is an optimized benzene dimer.
 
-## Preparation
+## Input
 
-Create a benzene dimer cluster (benzene_dimer.xyz):
+Save the following single-frame, angstrom XYZ as `benzene_dimer.xyz`:
 
-```bash
-cat > benzene_dimer.xyz << 'EOF'
+```text
 24
-Benzene Dimer (T-shaped)
+Two separated benzene fragments; angstrom
 C   0.000000   1.395000   0.000000
 C   1.208543   0.697500   0.000000
 C   1.208543  -0.697500   0.000000
@@ -22,145 +22,56 @@ H   2.150000  -1.239500   0.000000
 H   0.000000  -2.479000   0.000000
 H  -2.150000  -1.239500   0.000000
 H  -2.150000   1.239500   0.000000
-C   0.000000   5.300000   0.000000
-C   1.208543   6.100000   0.000000
-C   1.208543   7.500000   0.000000
-C   0.000000   8.300000   0.000000
-C  -1.208543   7.500000   0.000000
-C  -1.208543   6.100000   0.000000
-H   0.000000   4.200000   0.000000
-H   2.150000   5.600000   0.000000
-H   2.150000   7.900000   0.000000
-H   0.000000   9.400000   0.000000
-H  -2.150000   7.900000   0.000000
-H  -2.150000   5.600000   0.000000
-EOF
+C   0.000000   7.395000   0.000000
+C   1.208543   6.697500   0.000000
+C   1.208543   5.302500   0.000000
+C   0.000000   4.605000   0.000000
+C  -1.208543   5.302500   0.000000
+C  -1.208543   6.697500   0.000000
+H   0.000000   8.479000   0.000000
+H   2.150000   7.239500   0.000000
+H   2.150000   4.760500   0.000000
+H   0.000000   3.521000   0.000000
+H  -2.150000   4.760500   0.000000
+H  -2.150000   7.239500   0.000000
 ```
 
-## Basic Usage
+The expected distance-inferred partition is two 12-atom `C6H6` fragments.
+
+## Run
+
+Use a new output path:
 
 ```bash
-# Extract all monomers (12 atoms each)
-python3 molecular_sampler.py benzene_dimer.xyz --output-dir ./samples
-
-# Extract 20 dimers (nearest neighbor pairs)
-python3 molecular_sampler.py benzene_dimer.xyz --samples 20 --output-dir ./samples
+python3 molecular_sampler.py benzene_dimer.xyz \
+  --xyz-units angstrom \
+  --layer all \
+  --expected-fragments 2 \
+  --bond-scale 1.3 \
+  --samples 20 \
+  --output-dir benzene_dimer_samples_run01
 ```
 
-## Create a Benzene Cluster (for more interesting sampling)
+Despite `--samples 20`, two source fragments can produce only two monomers and
+one unique nearest-neighbor dimer. Trimer, tetramer, and pentamer directories
+must be empty. Claiming 20 dimers from this input would be incorrect.
 
-Build a larger cluster with multiple benzene molecules:
-
-```python
-#!/usr/bin/env python3
-"""build_benzene_cluster.py — Create a benzene cluster XYZ file"""
-
-import numpy as np
-import random
-
-# Benzene monomer template (centered at origin)
-benzene = np.array([
-    [0.000000, 1.395000, 0.000000],   # C
-    [1.208543, 0.697500, 0.000000],   # C
-    [1.208543,-0.697500, 0.000000],   # C
-    [0.000000,-1.395000, 0.000000],   # C
-    [-1.208543,-0.697500, 0.000000],  # C
-    [-1.208543, 0.697500, 0.000000],  # C
-    [0.000000, 2.479000, 0.000000],   # H
-    [2.150000, 1.239500, 0.000000],   # H
-    [2.150000,-1.239500, 0.000000],   # H
-    [0.000000,-2.479000, 0.000000],   # H
-    [-2.150000,-1.239500, 0.000000],  # H
-    [-2.150000, 1.239500, 0.000000],  # H
-])
-
-random.seed(42)
-n_mol = 24
-nat_per_mol = 12
-min_dist = 5.0  # minimum COM-COM distance (Angstrom)
-
-# Place molecules randomly
-positions = []
-atoms = []
-for i in range(n_mol):
-    while True:
-        offset = np.array([
-            random.uniform(-15, 15),
-            random.uniform(-15, 15),
-            random.uniform(-15, 15)
-        ])
-        # Check minimum distance
-        ok = True
-        for prev in positions:
-            if np.linalg.norm(offset - prev) < min_dist:
-                ok = False
-                break
-        if ok:
-            positions.append(offset)
-            for atom in benzene:
-                shifted = atom + offset
-                atoms.append(f"C {shifted[0]:.6f} {shifted[1]:.6f} {shifted[2]:.6f}"
-                             if len(atoms) % nat_per_mol < 6 else
-                             f"H {shifted[0]:.6f} {shifted[1]:.6f} {shifted[2]:.6f}")
-            break
-
-# Write XYZ
-with open('benzene_cluster_N24.xyz', 'w') as f:
-    f.write(f"{len(atoms)}\n")
-    f.write(f"Benzene cluster, {n_mol} molecules\n")
-    for line in atoms:
-        f.write(line + '\n')
-
-print(f"Created benzene_cluster_N24.xyz with {n_mol} benzene molecules")
-```
-
-## Run Sampling on Benzene Cluster
+## Acceptance checks
 
 ```bash
-# Extract all 24 monomers
-python3 molecular_sampler.py benzene_cluster_N24.xyz \
-    --output-dir ./benzene_samples \
-    --layer all
-
-# Sample dimers (20 nearest-neighbor pairs)
-python3 molecular_sampler.py benzene_cluster_N24.xyz \
-    --samples 20 \
-    --output-dir ./benzene_samples
-
-# Check results
-ls ./benzene_samples/
-# monomers/  dimers/  trimers/  tetramers/  pentamers/
-ls ./benzene_samples/dimers/ | wc -l
-# 20
+test -s benzene_dimer_samples_run01/sampling_manifest.json
+test -s benzene_dimer_samples_run01/sampling_summary.txt
+test "$(find benzene_dimer_samples_run01/monomers -name '*.xyz' | wc -l)" -eq 2
+test "$(find benzene_dimer_samples_run01/dimers -name '*.xyz' | wc -l)" -eq 1
+shasum -a 256 benzene_dimer.xyz \
+  benzene_dimer_samples_run01/sampling_manifest.json \
+  benzene_dimer_samples_run01/monomers/*.xyz \
+  benzene_dimer_samples_run01/dimers/*.xyz
 ```
 
-## Typical Output
+Open both monomers and the dimer, confirm the two six-membered rings, and check
+that no intermolecular contact was inferred as a covalent bond. The manifest
+must list source indices `0..11` and `12..23` as two disjoint components.
 
-Each sampled file is in standard XYZ format:
-```
-24
-Dimer: mol_0 + mol_1, dist=5.23 A
-C   0.000000   1.395000   0.000000
-...
-C   0.000000   5.300000   0.000000
-...
-```
-
-## Pipeline Integration
-
-Combine with other skills:
-
-```bash
-# 1. Sample dimers from cluster
-python3 molecular_sampler.py benzene_cluster_N24.xyz --samples 20
-
-# 2. Visualize sampled structures
-for f in ./benzene_samples/dimers/*.xyz; do
-    xyzrender "$f" --png "renders/$(basename $f .xyz).png" --transparent --color --bond-order
-done
-
-# 3. Run PySCF on each dimer
-for f in ./benzene_samples/dimers/*.xyz; do
-    python3 pyscf_dimer_calc.py "$f"
-done
-```
+The output XYZ files contain geometry only. Assign and validate each downstream
+job's charge and multiplicity independently.

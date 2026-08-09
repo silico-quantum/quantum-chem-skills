@@ -1,0 +1,4 @@
+interface:
+  display_name: "Molecular Orbital Analysis"
+  short_description: "Generate and validate indexed PySCF orbital cubes"
+  default_prompt: "Use $molecular-orbital-analysis to generate traceable molecular-orbital cubes from a converged, explicitly specified PySCF calculation."

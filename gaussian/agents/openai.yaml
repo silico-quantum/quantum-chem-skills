@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gaussian Electronic Structure"
+  short_description: "Prepare and validate Gaussian quantum chemistry runs"
+  default_prompt: "Use $gaussian to prepare and validate a provenance-complete Gaussian calculation."

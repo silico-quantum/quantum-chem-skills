@@ -1,0 +1,4 @@
+interface:
+  display_name: "Molecular Sampler"
+  short_description: "Prepare deterministic fragment-neighborhood samples"
+  default_prompt: "Use $molecular-sampler to create validated, deterministic fragment samples with explicit input and connectivity provenance."

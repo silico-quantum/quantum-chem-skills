@@ -5,6 +5,10 @@ Simplified charge and noncovalent-interaction visualization using RDKit only.
 This qualitative analysis does not replace rigorous ESP or RDG calculations.
 """
 
+from _legacy_guard import refuse_legacy_example
+
+refuse_legacy_example(__file__)
+
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
 from rdkit.Chem.Draw import rdMolDraw2D

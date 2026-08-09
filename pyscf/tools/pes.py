@@ -2,15 +2,19 @@
 """
 PES - Potential Energy Surface scanning
 
-Supports:
+Historical claims (unvalidated):
     - 1D rigid scan (fixed geometry)
     - 1D relaxed scan (optimize at each point)
     - 2D grid scan
 
-Usage:
+Historical interface (disabled):
     python pes.py <xyz_file> <functional> [basis]
     python pes.py h2_scan.csv b3lyp cc-pvdz --scan-type bond --atom1 1 --atom2 2 --rmin 0.8 --rmax 1.5 --npoints 20
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -218,7 +222,3 @@ def main():
     else:
         relaxed_scan_1d(xyz_file, functional, basis,
                        scan_range=(0.8, 2.0), npoints=10)
-
-
-if __name__ == '__main__':
-    main()

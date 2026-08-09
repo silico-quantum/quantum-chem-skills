@@ -10,12 +10,16 @@ Functional categories:
     range-separated: WB97X, WB97X-D, CAM-B3LYP
     dispersion: WB97X-D3BJ
 
-Usage:
+Historical interface (disabled):
     python dft.py <xyz_file> <functional> [basis]
     python dft.py water.csv pbe cc-pvdz
     python dft.py mol.csv wb97x-d3bj def2-tzvp
     python dft.py compare.csv "b3lyp,pbe0,wb97x-d3bj" 6-31G*
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -82,7 +86,7 @@ def run_dft(xyz_file, functional='pbe', basis='cc-pvdz',
         functional: functional name
         basis: basis set
         restricted: True = RKS, False = UKS
-        spin: spin multiplicity
+        spin: Nalpha - Nbeta = 2S
         charge: molecular charge
     
     Returns:
@@ -199,7 +203,3 @@ def main():
         compare_functionals(xyz_file, functional, basis)
     else:
         run_dft(xyz_file, functional, basis)
-
-
-if __name__ == '__main__':
-    main()

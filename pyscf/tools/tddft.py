@@ -2,16 +2,20 @@
 """
 TDDFT - Time-Dependent DFT excited state calculations
 
-Supports:
+Historical claims (unvalidated):
     - TDDFT (linear response)
     - TDA (Tamm-Dancoff approximation)
     - CIS (Configuration Interaction Singles)
     - UV-Vis spectrum generation
 
-Usage:
+Historical interface (disabled):
     python tddft.py <xyz_file> <functional> [basis] [nstates]
     python tddft.py water.csv b3lyp cc-pvdz 10
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -44,7 +48,7 @@ def run_tddft(xyz_file, functional='b3lyp', basis='cc-pvdz',
         nstates: number of excited states
         restricted: RKS (True) or UKS (False)
         charge: molecular charge
-        spin: spin multiplicity
+        spin: Nalpha - Nbeta = 2S
     
     Returns:
         dict with 'td', 'mf', 'mol'
@@ -174,7 +178,3 @@ def main():
         run_tda(xyz_file, functional, basis, nstates)
     else:
         run_tddft(xyz_file, functional, basis, nstates)
-
-
-if __name__ == '__main__':
-    main()

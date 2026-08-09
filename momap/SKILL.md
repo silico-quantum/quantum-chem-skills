@@ -1,415 +1,305 @@
 ---
 name: momap
-description: Use when preparing, running, or interpreting MOMAP workflows for molecular photophysics, nonradiative rates, spectra, spin-orbit coupling, or charge transport.
+description: Use when preparing, running, validating, or reporting licensed MOMAP photophysics workflows from Gaussian outputs, including EVC, vibronic spectra, and explicitly parameterized ISC calculations.
 license: MIT
-compatibility: Requires a licensed MOMAP installation; selected workflows also require Gaussian outputs, MPI, PySOC, or a Slurm environment.
+compatibility: Requires Python 3, a licensed MOMAP installation, and Gaussian log plus formatted-checkpoint files; selected workflows also require formchk, MPI, PySOC, or Slurm.
 ---
 
-# MOMAP Workflow Skill
+# MOMAP
 
-**MOMAP (Molecular Materials Property Prediction Package)** predicts molecular-material photophysical and transport properties.
-Version 2024A (2.3.7), Hongzhiwei Technology / Z.G. Shuai Group
+Use MOMAP only through the syntax and executables shipped with the licensed
+local installation. This skill documents the repository's MOMAP 2024A-style
+interface; confirm it against the local examples before adapting another
+release. Never convert a missing parameter or failed stage into a numerical
+result.
 
-## Environment Setup
+## Prerequisites
 
-```bash
-# Source the licensed installation's environment script.
-source "${MOMAP_ENV:-/opt/MOMAP-2024A/env.sh}"
+- Source the licensed installation environment or set `MOMAP_ROOT` so that the
+  `momap` launcher is discoverable. Preserve the administrator-provided
+  `MOMAP_LICENSE`; the bundled runner does not replace it.
+- Use the Python interpreter for the active environment. `formchk` is required
+  only when a Gaussian `.chk` must be converted to `.fchk`.
+- For Slurm, use the site's partition and MPI policy. The wrapper has no
+  site-specific partition default.
+- Record the MOMAP release, Gaussian release, Python version, MPI
+  implementation, host, and command before production work.
 
-# Alternatively, use the site-specific environment module when available.
-module load "${MOMAP_MODULE:-momap/2024A-openmpi}"
-```
-
-**Key env vars set by env.sh:**
-- `MOMAP_ROOT` points to the installation root.
-- `MOMAP_BIN=$MOMAP_ROOT/bin`
-- `MOMAP_MPI_BIN=$MOMAP_ROOT/bin/openmpi/bin`
-- `MOMAP_LICENSE` points to the licensed installation's license file.
-- `LD_LIBRARY_PATH` includes `.../openmpi/lib` and `.../lib`
-
-**MPI compatibility note:** MOMAP ships OpenMPI 1.x but the system OpenMPI is 3.1.4.
-The `-machinefile` flag is not supported in OpenMPI 3.x (use `--hostfile`).
-→ Copy and patch `momap` script: `sed 's/-machinefile/--hostfile/g'`
-→ Run `python momap_patched -i momap.inp`
-→ Nodefile format for 3.x: `localhost slots=4`
-
-## Real Input Format (MOMAP 2024A)
-
-**No `&control` block, no `jobtype`.** Each calculation type is a top-level flag + a named block.
-
-### Step 1: Electron-Vibration Coupling (EVC)
-
-**Prerequisites:** Gaussian `.log` **AND** `.fchk` files for both states.
-Generate `.fchk` with: `formchk job.chk job.fchk`
-
-```
-do_evc = 1
-
-&evc
-  ffreq(1) = "mol-s0.log"    # Ground state freq (S0)
-  ffreq(2) = "mol-s1.log"    # Excited state freq (S1/T1)
-  ftdipd   = "mol-s1.log"    # Optional: transition dipole from this file
-  sort_mode = 1              # Mode sorting (1=default)
-/
-```
+Bind every run to the reviewed licensed launcher and its exact runtime banner:
 
 ```bash
-momap -i momap.inp
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact full-line banner verified for this licensed 2024A build}"
 ```
 
-**Output files:**
-| File | Content |
-|------|---------|
-| `evc.cart.dat` | Duschinsky matrix + Huang-Rhys factors (Cartesian) |
-| `evc.dint.dat` | Duschinsky matrix (internal coords) |
-| `evc.cart.abs` | Absorption data |
-| `evc.dint.abs` | Absorption (internal coords) |
-| `evc.out` | Full log with frequencies, mode pairing, reorganization energies |
-| `evc.vib*.xyz` | Vibration mode visualizations |
-| `evc.dx.x.xyz` | Displacement vectors |
-| `evc.dx.x.com` | Displaced structure (Gaussian input) |
+Do not infer `2024A` from filenames or example output. The runner re-reads the
+original launcher without following symbolic links, matches its SHA-256,
+captures `momap_runner.log`, and requires the exact banner once.
 
-### Step 2: Spectrum (spec_tvcf)
-
-```
-do_spec_tvcf_ft   = 1       # Fourier transform of time correlation function
-do_spec_tvcf_spec = 1       # Generate spectrum
-
-&spec_tvcf
-  DUSHIN   = .t.            # Use Duschinsky rotation
-  HERZ     = .t.            # Herzberg-Teller effect (optional)
-  Temp     = 300 K
-  tmax     = 5000 fs        # Correlation time
-  dt       = 0.001 fs        # Time step
-  Ead      = 0.07509 au     # ⚠️ Adiabatic excitation energy (S1_min - S0_min)
-  EDMA     = 0.92694 debye  # ⚠️ Absorption transition dipole (vertical)
-  EDME     = 0.64751 debye  # ⚠️ Emission transition dipole (from S1 min)
-  FreqScale = 1.0
-  DSFile   = "evc.cart.dat" # From EVC step
-  Emax     = 0.3 au         # Max energy for output
-  dE       = 0.00001 au     # Energy resolution
-  logFile  = "spec.tvcf.log"
-  FtFile   = "spec.tvcf.ft.dat"
-  FoFile   = "spec.tvcf.fo.dat"
-  FoSFile  = "spec.tvcf.spec.dat"
-/
-```
+Preflight without running a calculation:
 
 ```bash
-momap -i momap.inp
+command -v momap
+python3 tools/extract.py --help
+python3 tools/runner.py --help
+python3 tools/tadf.py --help
 ```
 
-**Output (spec.tvcf.spec.dat):**
-```
-#1Energy(Hartree) 2Energy(eV) 3Wavenumber(cm-1) 4Wavelength(nm) 5FC_abs 6FC_emi 7FC_emi_intensity
-```
+Run these relative paths from the `momap/` skill directory, or replace them
+with the absolute path to that directory when operating in a calculation
+worktree.
 
-### Step 3: ISC Rate (isc_tvcf)
+## Input contract
 
-```
-do_isc_tvcf_ft   = 1       # Fourier transform
-do_isc_tvcf_spec = 1       # Phosphorescence spectrum
+Create a calculation manifest before execution. It must identify:
 
-&isc_tvcf
-  DUSHIN   = .t.
-  Temp     = 298 K
-  tmax     = 5000 fs
-  dt       = 0.001 fs
-  Ead      = 0.094 au     # S1-T1 adiabatic gap
-  Hso      = 116.9 cm-1   # ⚠️ Spin-orbit coupling (from PySOC or exp.)
-  DSFile   = "evc.cart.dat"
-  Emax     = 0.3 au
-  logFile  = "isc.tvcf.log"
-  FtFile   = "isc.tvcf.ft.dat"
-  FoFile   = "isc.tvcf.fo.dat"
-/
-```
+- molecule and geometry provenance for every state;
+- charge, multiplicity, electronic state, method, basis, solvent model, and
+  Gaussian route for S0, S1, and T1 where applicable;
+- the state/root mapping used throughout optimization and property extraction;
+- temperature, time step, correlation time, broadening, and all MOMAP units;
+- the source and uncertainty of every transition dipole, nonadiabatic
+  coupling, and spin-orbit coupling;
+- expected output paths and whether each output may be created.
 
-**Output:** ISC rate (k_ISC), phosphorescence spectrum.
+EVC requires matched Gaussian `.log` and `.fchk` files for both states. Confirm
+successful Gaussian termination, compatible atom order, atom count, isotope
+assignment, method, and frequency treatment. A file name is not evidence that
+an optimization, frequency calculation, or target state succeeded.
 
-### Step 4: Internal Conversion (ic_tvcf)
+For a Gaussian linear-response TDDFT S1 log, compute the state total energy on
+a common reference:
 
-```
-do_ic_tvcf_ft   = 1
-do_ic_tvcf_spec = 1
-
-&ic_tvcf
-  DUSHIN   = .t.
-  Temp     = 300 K
-  tmax     = 655 fs
-  dt       = 0.01 fs
-  Ead      = 0.094 au
-  DSFile   = "evc.cart.dat"
-  CoulFile = "evc.cart.nac"  # ⚠️ Non-adiabatic coupling
-  logFile  = "ic.tvcf.log"
-  FtFile   = "ic.tvcf.ft.dat"
-/
+```text
+E_S1,total(R_S1) = E_reference,SCF(R_S1) + omega_S1(R_S1)
+Ead = E_S1,total(R_S1) - E_S0,total(R_S0)
 ```
 
-**Output:** IC rate (k_IC) — non-radiative decay S₁→S₀.
+`omega_S1` is the final state-1 vertical excitation at the S1 geometry. Both
+total-energy terms must use the same Hamiltonian and energy convention. Never
+use `E_reference,SCF(R_S1) - E_S0,total(R_S0)` as Ead. Apply zero-point or
+thermal corrections only when they are defined consistently for both states.
 
-### Step 5: Spin-Orbit Coupling (PySOC)
+ISC additionally requires a finite positive `Hso` in `cm^-1` from a named
+computed or measured source and a signed S1-T1 adiabatic gap in Hartree. In the
+bundled pipeline, `E_T1` is the final Gaussian `SCF Done` total electronic
+energy at the T1 geometry; it is not a TD excitation, zero-point-corrected
+energy, or free energy. `E_S1` is the reconstructed linear-response total
+energy defined above. Both must use compatible electronic-structure
+conventions. The expected ordering is `E_S1 - E_T1 > 0`. Never apply `abs()` to
+hide the opposite ordering: flag it, verify state identity, and fail a requested
+ISC calculation. Missing SOC means `not_computed`, not a default coupling.
 
-Auto-generates SOC matrix elements from TDDFT:
+## Workflow
 
-```
-do_pysoc = 1
+1. Copy source data into a new work directory without modifying the originals.
+2. Verify Gaussian termination, state identity, atom order, and matching
+   `.fchk` files. Hash the source files.
+3. Extract Ead and transition dipoles:
 
-&pysoc
-  sched_type = local
-  qc_exe     = g16
-  qc_ppn     = 8
-  pysoc_QM_code = 'gauss_tddft'
-  n_excited_singlets = 4
-  n_excited_triplets = 4
-/
-```
+   ```bash
+   set -e
+   test ! -e parameters.json && test ! -L parameters.json || exit 1
+   test ! -e parameters.json.partial && \
+     test ! -L parameters.json.partial || exit 1
+   python3 tools/extract.py --s0 s0.log --s1 s1.log --json \
+     > parameters.json.partial
+   test -s parameters.json.partial
+   mv parameters.json.partial parameters.json
+   ```
 
-**Output:** Hso values (cm⁻¹) for S₁→T₁, S₁→T₂, ... → feeds into isc_tvcf.
+   The extractor uses the first and last state-1 transition-dipole tables for
+   absorption and emission. Review that mapping in the actual Gaussian log;
+   reject root changes or ambiguous tables.
 
-### Step 6: Full Rate Summary (spec_sums)
+4. Prefer the fail-closed pipeline for a complete S1-to-S0 spectrum and optional
+   S1-to-T1 ISC calculation:
 
-Sum-over-states method — computes k_r, k_IC, k_ISC simultaneously:
+   ```bash
+   test ! -e ./momap-results && test ! -L ./momap-results || exit 1
+   test ! -e ./molecule-001-result.json && \
+     test ! -L ./molecule-001-result.json || exit 1
+   python3 tools/tadf.py molecule-001 \
+     --s0 s0.log --s1 s1.log --t1 t1.log \
+     --hso-cm1 "$HSO_CM1" --output ./momap-results \
+     --json-output ./molecule-001-result.json \
+     --expected-build "$MOMAP_BUILD" \
+     --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+     --expected-version-banner "$MOMAP_VERSION_BANNER"
+   ```
 
-```
-do_spec_sums = 1
+   Use a new molecule ID and output directory. The pipeline refuses an existing
+   molecule directory. It isolates generated files under `evc_s1_s0/`,
+   `spectrum/`, `evc_s1_t1/`, and `isc/`; each accepted stage receives a
+   `stage_receipt.json` containing input/output SHA-256 hashes, sizes, and
+   timestamps. This prevents the two EVC calculations from overwriting each
+   other's `evc.out` or `evc.cart.dat`.
+5. For a manual EVC stage, use a dedicated new directory and the local interface:
 
-&spec_sums
-  DSFile     = "evc.cart.dat"
-  Ead        = 0.094 au
-  dipole_abs = 0.092 debye
-  dipole_emi = 0.441 debye
-  maxvib     = 10
-  if_cal_ic  = .t.
-  FWHM       = 500 cm-1
-/
-```
+   ```text
+   do_evc = 1
+   &evc
+     ffreq(1) = "s0.log"
+     ffreq(2) = "s1.log"
+     sort_mode = 1
+   /
+   ```
 
-**Output:** All rates + quantum yield Φ in one pass.
+   ```bash
+   for target in nodefile evc.out evc.cart.dat evc.dint.dat; do
+     test ! -e "$target" && test ! -L "$target" || exit 1
+   done
+   python3 tools/runner.py momap_evc.inp --workdir "$PWD" \
+     --expected-build "$MOMAP_BUILD" \
+     --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+     --expected-version-banner "$MOMAP_VERSION_BANNER"
+   ```
 
-### Step 7: Charge Transport (transport)
+6. Generate and review the fluorescence input from the extracted values. Run
+   `spec_tvcf` only after `evc.cart.dat` is accepted. Do not reuse another
+   molecule's Ead, EDMA, or EDME.
+7. For standalone ISC input generation, first build and accept the S1-T1 EVC
+   file in its own directory, then use the repository's local
+   `isc_tvcf` interface. The generator requires explicit SOC:
 
-Carrier mobility for OLED charge balance:
+   ```bash
+   test ! -e momap_isc.inp && test ! -L momap_isc.inp || exit 1
+   python3 tools/oled.py isc --evc-dat evc.cart.dat \
+     --ead "$ISC_EAD_AU" --hso "$HSO_CM1" -o momap_isc.inp
+   for target in nodefile isc.tvcf.log isc.tvcf.spec.dat; do
+     test ! -e "$target" && test ! -L "$target" || exit 1
+   done
+   python3 tools/runner.py momap_isc.inp --workdir "$PWD" \
+     --expected-build "$MOMAP_BUILD" \
+     --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+     --expected-version-banner "$MOMAP_VERSION_BANNER"
+   ```
 
-```
-&transport
-  do_transport_prepare              = 1
-  do_transport_get_transferintegral = 1
-  do_transport_get_re_evc           = 1
-  do_transport_run_MC               = 1
-  do_transport_get_mob_MC           = 1
-  compute_engine  = 1            # Gaussian
-  qc_exe          = g16
-  basis_name      = b3lyp STO-3g
-  temp            = 300
-  ratetype        = marcus       # marcus or quanta
-  lat_cutoff      = 4
-  nsimu           = 2000
-  tsimu           = 1000         # ns
-  crystal         = molecule.cif
-/
-```
+   The generator rejects a missing or empty EVC file, non-positive/non-finite
+   Ead, temperature, correlation time, or SOC, and any existing output path.
+   The generated input uses `do_isc_tvcf_ft`, `do_isc_tvcf_spec`, and the
+   `&isc_tvcf` block used by the bundled local examples. Confirm those names
+   against the licensed installation before execution.
+8. Plot only a validated, non-empty spectrum to a new path:
 
-**Output:** Hole/electron mobility (cm²/V·s), transfer integrals, reorganization energies.
+   ```bash
+   test ! -e spectrum.png && test ! -L spectrum.png || exit 1
+   python3 tools/plot.py spec.tvcf.spec.dat \
+     --energy-window 1 5 --output spectrum.png
+   ```
 
-## OLED TADF Design — Complete Workflow
+   The plotter refuses overwrite. Its title is user-supplied; it does not invent
+   a MOMAP version or temperature. Put the actual version and temperature in
+   the manifest or `--title` only after verifying them.
+9. Archive input, stdout/stderr, exit status, outputs, source hashes, stage
+   receipts, and the
+   final manifest before interpreting rates or spectral peaks.
 
-```
-       Gaussian                          MOMAP
-  ┌──────────────┐              ┌─────────────────────┐
-  │ S0 opt+freq  │──────┐       │ EVC (S₁→S₀)         │
-  │ S1 opt+freq  │      ├──────→│ EVC (S₁→T₁)         │
-  │ T1 opt+freq  │──────┘       │                     │
-  │ NACT calc    │──→ NACME ──→│ ic_tvcf   → k_IC    │
-  │ PySOC calc   │──→ Hso  ───→│ isc_tvcf  → k_ISC   │
-  │ TDDFT (vert) │──→ EDMA/EDME│ spec_tvcf → k_r     │
-  └──────────────┘              │ spec_sums → Φ (QY)  │
-                                │ transport → μ_h, μ_e│
-                                └─────────────────────┘
-```
+## Validation and acceptance
 
-**Key OLED figures of merit:**
-| Quantity | MOMAP Module | Required Input |
-|----------|-------------|---------------|
-| k_r (radiative) | spec_tvcf | EVC + EDMA/EDME |
-| k_IC (internal conv.) | ic_tvcf | EVC + NACME |
-| k_ISC (S₁→T₁) | isc_tvcf | EVC + Hso (SOC) |
-| k_RISC (T₁→S₁) | isc_tvcf | k_ISC × exp(-ΔE_ST/kT) |
-| Φ (quantum yield) | spec_sums | all above |
-| μ_h (hole mobility) | transport | Transfer integral + λ |
-| μ_e (electron mob.) | transport | Transfer integral + λ |
+Accept a stage only when all applicable checks pass. The automated validators
+currently implement this MOMAP 2024A-style local fixture contract:
 
-## Extracting Parameters from Gaussian Output
+- each Gaussian state uses the supported two-job chain: one completed
+  optimization followed by one harmonic-frequency job, both ending in unique
+  exact Gaussian normal-termination lines, with no fatal tail;
+- S0/S1/T1 multiplicities are 1/1/3, respectively; charge and atom order remain
+  unchanged across the two jobs and match `Number of atoms`, `Atomic numbers`,
+  `Charge`, and `Multiplicity` in the paired formatted checkpoint;
+- the S1 optimization remains on target root 1, and both jobs contain state-1
+  excitation and transition-dipole evidence;
 
-### Ead (adiabatic excitation energy)
-```
-# From S0 log:
-grep "SCF Done" s0.log | tail -1    →  E_SCF_S0
+- EVC: `evc.out` contains `Normal finish of evc calculation`;
+- spectrum: `spec.tvcf.log` contains `Normal finish of spec_tvcf calculation`;
+- ISC: `isc.tvcf.log` contains `Normal finish of isc_tvcf calculation`.
 
-# From S1 log at the S1 minimum:
-grep "SCF Done" s1.log | tail -1    →  E_SCF_reference
-grep "Excited State   1:" s1.log | tail -1  →  E_exc,S1 in eV
+These strings are case-insensitive but otherwise exact. They are repository
+compatibility contracts, not universal MOMAP promises. A different release
+must fail closed until its local output is reviewed and a tested marker is
+added. In addition:
 
-# E_S1,total = E_SCF_reference + E_exc,S1 / 27.2114
-# Ead = E_S1,total - E_SCF_S0  (in Hartree)
-# Do not substitute E_SCF_reference when the state-1 excitation is missing.
-```
+- the process exit code is zero; `momap_runner.log` contains the caller-supplied
+  exact full-line 2024A version banner exactly once; and the module log shows
+  its documented normal completion without fatal diagnostics;
+- every required output exists, is non-empty, and was created after that stage
+  began;
+- EVC reports the expected atom and mode counts and no unexplained mode loss;
+- extracted state energies reproduce the declared Ead formula and units;
+- every non-empty, non-comment spectrum row has exactly seven numeric columns
+  for the local 2024A fixture; at least three rows are present, all values are
+  finite, the Hartree/eV and eV/wavenumber conversions agree within 1%, all
+  three intensity columns are non-negative, the eV axis is strictly monotonic,
+  the wavelength axis runs in the opposite direction, and each eV/nm pair
+  agrees with `hc` within 1%. Reject tail text, partial rows, and fatal
+  diagnostics even if a completion marker also appears;
+- an ISC result names the SOC source and value and reports finite ISC and RISC
+  rates with explicit `s^-1` units. When labels are present, `ISC` and `RISC`
+  must each occur exactly once; duplicates, conflicts, or mixed labelled and
+  unlabelled records fail. The versioned local 2024A fallback accepts exactly
+  two unlabelled rate records and records `first=ISC, second=RISC`;
+- rerunning the parser on archived outputs reproduces the reported values.
 
-### EDMA (absorption transition dipole moment)
-From S0 geometry TDDFT output:
-```
-grep -A5 "transition electric dipole" s1.log | head -10
-#  state    X        Y        Z       Dip.S.    Osc.
-#    1   0.2169   0.2932   0.0000   0.1330    0.0079
-# sqrt(X² + Y² + Z²) × 2.541746 → debye
-# Equivalently, use sqrt(Dip.S.) × 2.541746 if XYZ is unavailable.
-```
+Do not infer a rate unit from magnitude. Do not call a spectrum, rate, quantum
+yield, or mobility successful merely because a file was created.
 
-### EDME (emission transition dipole moment)
-From S1 minimum geometry TDDFT (last Excited State block):
-```
-# Same as EDMA but from the last TDDFT block in s1.log
-# Use the vector norm for state 1 at the S1-optimized geometry
-```
+## Failure handling
 
-## Example: Azulene (bundled test)
+- Missing `.fchk`: choose a new target, reject both an existing path and a
+  dangling symbolic link, run `formchk` on the matching `.chk`, then verify the
+  target is non-empty and belongs to the same Gaussian job.
+- Missing final state-1 excitation: stop; an S1 total energy cannot be recovered
+  from the SCF reference alone.
+- Root change or inconsistent atom order: stop and repair the electronic-state
+  or geometry provenance before rerunning EVC.
+- Missing SOC or T1 data: report ISC as `not_computed`. Never insert a test value.
+- Non-positive signed S1-T1 gap: record
+  `unexpected_S1_not_above_T1`; fail requested ISC and review state/energy
+  provenance. Never replace the signed gap with its absolute value.
+- Missing, empty, stale, unitless, non-finite, or unparsable ISC output: report
+  ISC as `failed`, keep global `success: false`, and retain the stage directory.
+- Empty or all-zero spectrum: retain the raw file and mark the spectrum failed;
+  do not normalize or select a peak.
+- MOMAP, EVC, spectrum, or requested ISC nonzero exit: keep `success: false` and
+  record the failing stage, command, exit code, and log path.
+- MPI launcher incompatibility: use `tools/runner.py`, which reads the original
+  launcher without following links, verifies its expected SHA-256, and creates
+  a private mode-0700 temporary patched launcher. Receipts record original and
+  patched hashes plus the exact replacement count; do not maintain a permanent
+  hand-edited copy.
+- License or scheduler error: stop and ask the site administrator; do not alter
+  license paths or choose a guessed partition.
 
-Test directory: `/opt/MOMAP-2024A/tests/azulene/gaussian/`
+## Output and reporting
 
-```bash
-mkdir ~/momap_azulene && cd ~/momap_azulene
-# Copy ref log + fchk files
-cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s0.* .
-cp /opt/MOMAP-2024A/tests/azulene/gaussian/ref/azulene-s1.* .
+Write a machine-readable result and a short human summary. At minimum include:
 
-# Step 1: EVC
-cat > momap_evc.inp << 'EOF'
-do_evc = 1
-&evc
-  ffreq(1) = "azulene-s0.log"
-  ffreq(2) = "azulene-s1.log"
-/
-EOF
-source /opt/MOMAP-2024A/env.sh
-momap -i momap_evc.inp
+- molecule ID, source hashes, geometry/state provenance, and atom count;
+- software versions, command, working directory, and exit codes;
+- method, basis, charge, multiplicity, state/root mapping, and units;
+- `E_S0`, reference SCF energy at S1, `omega_S1`, reconstructed `E_S1,total`,
+  Ead, EDMA, and EDME with their sources;
+- EVC output paths, validation status, receipt paths, and SHA-256 hashes;
+- spectrum path, energy window, peak rule, and peak only if validated;
+- every rate with the exact output label, rate units, and parser contract;
+- ISC status as `computed`, `failed`, or `not_computed`, plus the SOC provenance;
+- warnings, failed stages, approximations, and unresolved questions.
 
-# Step 2: Spectrum (copy ref params)
-cp /opt/MOMAP-2024A/tests/azulene/kr/momap.inp momap_spec.inp
-momap -i momap_spec.inp
-```
+Keep computed evidence separate from interpretation. A blue-window flag, TADF
+assessment, or device conclusion is downstream interpretation, not a MOMAP
+termination criterion.
 
-## TADF Workflow Integration
+## References
 
-For TADF molecules, the MOMAP pipeline is:
+- [Repository worked examples](EXAMPLES.md)
+- [Repository MOMAP 2024A-style quick reference](QUICKREF.md)
+- [MOMAP product page](https://www.hzw.ai/momap/index)
+- Y. Niu et al., *Molecular Physics* 116 (2018), DOI:
+  `10.1080/00268976.2017.1402966`
 
-```
-Gaussian S0 opt+freq  →  s0.log + s0.fchk
-Gaussian T1 opt+freq  →  t1.log + t1.fchk
-Gaussian S1 TDDFT     →  s1.log + s1.fchk (vertical + adiabatic)
-       ↓
-   EVC (S0 vs S1)     →  evc_s1.cart.dat
-   EVC (S1 vs T1)     →  evc_t1.cart.dat
-       ↓
-   spec_tvcf (S1→S0)  →  fluorescence spectrum
-   ISC (S1→T1)        →  k_ISC rate
-       ↓
-   Quantum yield: Φ = k_r / (k_r + k_IC + k_ISC)
-```
-
-## Troubleshooting
-
-### `mpiexec: Error: unknown option "-machinefile"`
-MOMAP was compiled with OpenMPI 1.x, system has 3.x.
-**Fix:** Copy + patch `momap` script:
-```bash
-cp $MOMAP_BIN/momap momap_patched
-sed -i 's/-machinefile/--hostfile/g' momap_patched
-echo "localhost slots=4" > nodefile
-python momap_patched -i momap.inp
-```
-
-### `Can not find Gaussian fchk file!`
-MOMAP needs **both** `.log` and `.fchk` files in the same directory.
-```bash
-formchk job.chk job.fchk
-```
-
-### spec_tvcf killed (OOM)
-Use MPI on a compute node with more memory:
-```bash
-#SBATCH --mem=64G
-mpirun -np 4 momap -i momap.inp
-```
-
-### Reference files
-All test examples with pre-computed Gaussian logs:
-- `$MOMAP_ROOT/tests/azulene/gaussian/ref/` — azulene S0/S1
-- `$MOMAP_ROOT/tests/porphine/gaussian_g16/` — porphine
-- `$MOMAP_ROOT/tests/Irppy3/` — Ir(ppy)₃
-
-Repository guidance:
-- [Worked examples](EXAMPLES.md)
-- [Command quick reference](QUICKREF.md)
-
-## Citations
-
-- Y. Niu et al., *Molecular Physics*, **2018**, doi: 10.1080/00268976.2017.1402966
-- Q. Peng et al., *J. Am. Chem. Soc.*, **2007**, 129, 9333-9339
-- Z. Shuai, Q. Peng, *Phys. Rep.*, **2014**, 537, 123
-- Z. Shuai, Q. Peng, *Nat. Sci. Rev.*, **2017**, 4, 224
-
-Official: http://www.momap.cn
-
-## Toolkit (momap/tools/)
-
-Five Python CLI tools for automated MOMAP workflows:
-
-### momap-extract — Gaussian → MOMAP params
-```bash
-python3 tools/extract.py --s0 mol-s0.log --s1 mol-s1.log [--t1 mol-t1.log]
-# Output: spec_tvcf input + JSON params (Ead, EDMA, EDME)
-# Auto-handles TDDFT: Ead = SCF_S1 + E_exc_adiabatic - SCF_S0
-```
-
-### momap-run — One-command MOMAP wrapper  
-```bash
-python3 tools/runner.py momap.inp [--slurm] [--nprocs 4]
-# Auto: MPI --hostfile patch, formchk (.chk→.fchk), Slurm submit
-```
-
-### momap-tadf — Full TADF pipeline
-```bash
-python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log \
-  --json-output result.json
-# Runs: EVC(S1→S0) → spec_tvcf → summary
-# Output: spectrum, peak λ, blue window check, ΔE_ST, ISC=not_computed
-
-# Add ISC only when a computed or measured SOC value is available:
-python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log \
-  --hso-cm1 12.5 --json-output result.json
-```
-
-The TADF tool stages each Gaussian log with its matching `.fchk` in the MOMAP
-work directory. It computes the S1 total energy as the last SCF reference
-energy plus the last state-1 excitation energy and fails if either quantity is
-missing. It uses state 1 from the first and last TD transition-dipole tables
-for absorption and emission, respectively, and converts the XYZ vector norm
-from atomic units to Debye. ISC is not run without an explicit `--hso-cm1`;
-no placeholder spin-orbit coupling is assumed.
-
-### momap-plot — Spectrum visualization
-```bash
-python3 tools/plot.py spec.tvcf.spec.dat -D --blue 450 490
-# Pillow fallback if no matplotlib. -D = save to Desktop.
-# Prints peak analysis with blue window highlighting.
-```
-
-### momap-oled — OLED extended modules (v3)
-```bash
-python3 tools/oled.py isc  --ead 0.094 --hso 116.9          # isc_tvcf → k_ISC
-python3 tools/oled.py ic   --ead 0.094 --nac evc.cart.nac   # ic_tvcf → k_IC
-python3 tools/oled.py pysoc --com mol.com                    # PySOC → Hso values
-python3 tools/oled.py sums --ead 0.094 --dipole-abs 0.09 --dipole-emi 0.44  # Φ, all rates
-python3 tools/oled.py transport --cif crystal.cif            # μ_h, μ_e
-# Each generates a ready-to-run MOMAP input file.
-```
+The repository examples are compatibility aids, not evidence that a numerical
+result has been reproduced on the current machine.

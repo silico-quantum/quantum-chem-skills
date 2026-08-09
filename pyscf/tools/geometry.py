@@ -2,17 +2,21 @@
 """
 Geometry Optimization - Molecular geometry optimization and transition state search
 
-Supports:
+Historical claims (unvalidated):
     - Energy minimization (BFGS, CG, Newton-Raphson)
     - Transition state (dimer method)
     - Frequency calculation (verify minima/TS)
     - Constrained optimization
 
-Usage:
+Historical interface (disabled):
     python geometry.py <xyz_file> <functional> [basis]
     python geometry.py water.csv b3lyp cc-pvdz
     python geometry.py ts_guess.xyz pbe 6-31G* --ts
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -42,7 +46,7 @@ def run_optimization(xyz_file, functional='b3lyp', basis='cc-pvdz',
         functional: DFT functional
         basis: basis set
         charge: molecular charge
-        spin: spin multiplicity
+        spin: Nalpha - Nbeta = 2S
         method: 'bfgs', 'cg', 'newton'
     """
     symbols, coords = read_xyz(xyz_file)
@@ -169,7 +173,3 @@ def main():
     
     if freq_mode:
         run_frequency(result['mf'])
-
-
-if __name__ == '__main__':
-    main()

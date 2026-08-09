@@ -37,10 +37,14 @@ A symbolic link is convenient for a development checkout because `git pull` upda
 ```bash
 # Preferred for a development checkout. The destination must not already exist.
 mkdir -p /path/to/project/.agents/skills
+test ! -e /path/to/project/.agents/skills/pyscf && \
+  test ! -L /path/to/project/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" /path/to/project/.agents/skills/pyscf
 
 # Copy instead. Run this only when the destination does not already contain pyscf.
 mkdir -p /path/to/project/.agents/skills
+test ! -e /path/to/project/.agents/skills/pyscf && \
+  test ! -L /path/to/project/.agents/skills/pyscf || exit 1
 cp -R pyscf /path/to/project/.agents/skills/
 ```
 
@@ -55,10 +59,13 @@ Replace `pyscf` with another directory from the list above. Check an existing de
 ```bash
 # Project-level installation
 mkdir -p /path/to/project/.agents/skills
+test ! -e /path/to/project/.agents/skills/pyscf && \
+  test ! -L /path/to/project/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" /path/to/project/.agents/skills/pyscf
 
 # Personal installation
 mkdir -p ~/.agents/skills
+test ! -e ~/.agents/skills/pyscf && test ! -L ~/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.agents/skills/pyscf
 ```
 
@@ -69,10 +76,13 @@ ln -s "$PWD/pyscf" ~/.agents/skills/pyscf
 ```bash
 # Project-level installation
 mkdir -p /path/to/project/.claude/skills
+test ! -e /path/to/project/.claude/skills/pyscf && \
+  test ! -L /path/to/project/.claude/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" /path/to/project/.claude/skills/pyscf
 
 # Personal installation
 mkdir -p ~/.claude/skills
+test ! -e ~/.claude/skills/pyscf && test ! -L ~/.claude/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.claude/skills/pyscf
 ```
 
@@ -86,18 +96,24 @@ openclaw skills install ./pyscf --as pyscf
 
 # Or copy it into an explicit native workspace directory.
 mkdir -p /path/to/workspace/skills
+test ! -e /path/to/workspace/skills/pyscf && \
+  test ! -L /path/to/workspace/skills/pyscf || exit 1
 cp -R pyscf /path/to/workspace/skills/
 
 # Project-compatible installation by copy
 mkdir -p /path/to/workspace/.agents/skills
+test ! -e /path/to/workspace/.agents/skills/pyscf && \
+  test ! -L /path/to/workspace/.agents/skills/pyscf || exit 1
 cp -R pyscf /path/to/workspace/.agents/skills/
 
 # Personal installation for the default state; this root may contain symlinks.
 mkdir -p ~/.agents/skills
+test ! -e ~/.agents/skills/pyscf && test ! -L ~/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.agents/skills/pyscf
 
 # Managed installation in the default state directory
 mkdir -p ~/.openclaw/skills
+test ! -e ~/.openclaw/skills/pyscf && test ! -L ~/.openclaw/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.openclaw/skills/pyscf
 ```
 
@@ -111,23 +127,29 @@ skills may not be visible in a custom state.
 
 ### GitHub Copilot
 
-[GitHub Copilot skill documentation](https://docs.github.com/en/copilot/customizing-copilot/extending-copilot-chat-with-skills) supports `.github/skills`, `.agents/skills`, and `.claude/skills` at project scope. It supports `~/.copilot/skills` and `~/.agents/skills` at personal scope.
+[GitHub Copilot's customization reference](https://docs.github.com/en/copilot/reference/customization-cheat-sheet) supports `.github/skills`, `.agents/skills`, and `.claude/skills` at project scope. It supports `~/.copilot/skills` and `~/.agents/skills` at personal scope.
 
 ```bash
 # Repository-contained installation for cloud-hosted Copilot agents and review
 mkdir -p /path/to/project/.github/skills
+test ! -e /path/to/project/.github/skills/pyscf && \
+  test ! -L /path/to/project/.github/skills/pyscf || exit 1
 cp -R pyscf /path/to/project/.github/skills/
 
 # A project symlink is suitable only for local IDE or CLI sessions.
 mkdir -p /path/to/project/.agents/skills
+test ! -e /path/to/project/.agents/skills/pyscf && \
+  test ! -L /path/to/project/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" /path/to/project/.agents/skills/pyscf
 
 # Personal installation using the Copilot-specific location
 mkdir -p ~/.copilot/skills
+test ! -e ~/.copilot/skills/pyscf && test ! -L ~/.copilot/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.copilot/skills/pyscf
 
 # Personal installation using the shared Agent Skills location
 mkdir -p ~/.agents/skills
+test ! -e ~/.agents/skills/pyscf && test ! -L ~/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" ~/.agents/skills/pyscf
 ```
 
@@ -148,20 +170,23 @@ Examples for the open-source Python helpers are:
 conda create -n quantum-chem-skills -y python=3.11
 conda activate quantum-chem-skills
 
-# PySCF references and the molecular sampler
+# Supported PySCF runner and API environment
 python -m pip install pyscf numpy scipy
+
+# The molecular sampler needs only Python 3.10 or newer.
+python3 molecular-sampler/molecular_sampler.py --help
 
 # RDKit and xTB, when needed
 conda install -c conda-forge rdkit xtb
 
 # Animation helpers, when needed
-python -m pip install matplotlib pillow
+python -m pip install numpy matplotlib pillow
 
 # Rendering skill, when needed
 python -m pip install xyzrender
 ```
 
-Gaussian and MOMAP are separately distributed scientific programs and may require a license or site-specific module setup. Multiwfn and PyMOL should likewise be installed from their upstream distribution channels. Do not copy machine-specific login commands or module names from another environment without checking your local installation.
+Gaussian and MOMAP are separately distributed scientific programs and may require a license or site-specific module setup. Multiwfn and any cube-capable viewer should likewise be installed from their upstream distribution channels. Do not copy machine-specific login commands or module names from another environment without checking your local installation.
 
 ## 5. Verify the Installation
 
@@ -176,6 +201,7 @@ Then run only the relevant software checks:
 ```bash
 python3 molecular-sampler/molecular_sampler.py --help
 python3 xtb-cluster-md/scripts/build_cluster.py --help
+python3 pyscf/scripts/run_safe_dft_tda.py --help
 python -c "import pyscf; print(pyscf.__version__)"
 xtb --version
 ```

@@ -1,0 +1,4 @@
+interface:
+  display_name: "RDKit Chemistry"
+  short_description: "Build reproducible RDKit structures and descriptors"
+  default_prompt: "Use $rdkit-chemistry to prepare a validated, reproducible molecular structure with an auditable report."

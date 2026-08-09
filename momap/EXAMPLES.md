@@ -5,6 +5,9 @@ These examples record workflows and expected output shapes from a prior MOMAP
 paths, program versions, units, and numerical settings in your licensed local
 installation before using them as a reference.
 
+Set `MOMAP_SKILL_DIR` to the absolute path of this repository's `momap/`
+directory before invoking a bundled tool from a separate calculation workdir.
+
 ---
 
 ## Example 1: Azulene Full Pipeline (EVC → spec_tvcf)
@@ -14,22 +17,30 @@ Shows the complete workflow: Gaussian logs → EVC → spectrum.
 ### Setup
 
 ```bash
-mkdir ~/momap_azulene && cd ~/momap_azulene
+RUN_DIR="$HOME/momap_azulene_run_001"
+test ! -e "$RUN_DIR" && test ! -L "$RUN_DIR" || exit 1
+mkdir "$RUN_DIR"
+cd "$RUN_DIR"
+mkdir evc spectrum
 
 # Set this to the licensed MOMAP installation root.
 : "${MOMAP_ROOT:?Set MOMAP_ROOT before continuing}"
 
-# Copy reference Gaussian outputs (.log + .fchk required!)
-cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s0.log" .
-cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s0.fchk" .
-cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s1.log" .
-cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s1.fchk" .
+# Copy reference Gaussian outputs (.log + .fchk required) only to fresh names.
+for target in azulene-s0.log azulene-s0.fchk azulene-s1.log azulene-s1.fchk; do
+  test ! -e "evc/$target" && test ! -L "evc/$target" || exit 1
+done
+cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s0.log" evc/azulene-s0.log
+cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s0.fchk" evc/azulene-s0.fchk
+cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s1.log" evc/azulene-s1.log
+cp "$MOMAP_ROOT/tests/azulene/gaussian/ref/azulene-s1.fchk" evc/azulene-s1.fchk
 ```
 
 ### Step 1: EVC
 
 ```bash
-cat > momap_evc.inp << 'EOF'
+test ! -e evc/momap_evc.inp && test ! -L evc/momap_evc.inp || exit 1
+cat > evc/momap_evc.inp << 'EOF'
 do_evc = 1
 
 &evc
@@ -39,15 +50,26 @@ do_evc = 1
 EOF
 
 source "${MOMAP_ENV:-$MOMAP_ROOT/env.sh}"
-# Workaround for OpenMPI 3.x -machinefile issue:
-cp $MOMAP_BIN/momap momap_patched
-sed -i 's/-machinefile/--hostfile/g' momap_patched
-python momap_patched -i momap_evc.inp
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact verified 2024A full-line runtime banner}"
+for target in nodefile evc.out evc.cart.dat evc.dint.dat; do
+  test ! -e "evc/$target" && test ! -L "evc/$target" || exit 1
+done
+python3 "${MOMAP_SKILL_DIR:?Set MOMAP_SKILL_DIR}/tools/runner.py" \
+  "$PWD/evc/momap_evc.inp" --workdir "$PWD/evc" \
+  --expected-build "$MOMAP_BUILD" \
+  --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+  --expected-version-banner "$MOMAP_VERSION_BANNER"
 # → Normal finish of evc calculation
 # → 18 atoms, 54 modes
 ```
 
-Output: `evc.cart.dat` (94 KB), `evc.dint.dat`, `evc.out`
+Output: `evc/evc.cart.dat` (94 KB), `evc/evc.dint.dat`, `evc/evc.out`
 
 ### Step 2: Spectrum (spec_tvcf)
 
@@ -58,21 +80,33 @@ Copy reference parameters (Ead, EDMA, EDME are molecule-specific):
 # EDMA = absorption transition dipole moment (vertical S0→S1)
 # EDME = emission transition dipole moment (from S1 minimum)
 
-cp "$MOMAP_ROOT/tests/azulene/kr/momap.inp" momap_spec.inp
+test ! -e spectrum/momap_spec.inp && \
+  test ! -L spectrum/momap_spec.inp || exit 1
+test ! -e spectrum/evc.cart.dat && \
+  test ! -L spectrum/evc.cart.dat || exit 1
+cp "$MOMAP_ROOT/tests/azulene/kr/momap.inp" spectrum/momap_spec.inp
+cp evc/evc.cart.dat spectrum/evc.cart.dat
 
-# Fix nodefile for OpenMPI 3.x
-echo "localhost slots=4" > nodefile
-python momap_patched -i momap_spec.inp
-# → Normal finish
+for target in nodefile spec.tvcf.log spec.tvcf.spec.dat; do
+  test ! -e "spectrum/$target" && test ! -L "spectrum/$target" || exit 1
+done
+python3 "${MOMAP_SKILL_DIR:?Set MOMAP_SKILL_DIR}/tools/runner.py" \
+  "$PWD/spectrum/momap_spec.inp" --workdir "$PWD/spectrum" \
+  --expected-build "$MOMAP_BUILD" \
+  --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+  --expected-version-banner "$MOMAP_VERSION_BANNER"
+# → Normal finish of spec_tvcf calculation
 ```
 
-Output: `spec.tvcf.spec.dat` (19741 lines), columns: Energy(Ha), Energy(eV), Wavenumber, Wavelength(nm), FC_abs, FC_emi, FC_emi_intensity
+Output: `spectrum/spec.tvcf.spec.dat` (19741 lines), columns: Energy(Ha), Energy(eV), Wavenumber, Wavelength(nm), FC_abs, FC_emi, FC_emi_intensity
 
 ### Step 3: Plot
 
 ```python
+from pathlib import Path
+
 import numpy as np
-data = np.loadtxt('spec.tvcf.spec.dat')
+data = np.loadtxt('spectrum/spec.tvcf.spec.dat')
 wavelength = data[:, 3]   # nm
 emi = data[:, 5]          # FC_emi
 emi_norm = np.maximum(emi, 0) / np.max(np.maximum(emi, 0))
@@ -84,7 +118,10 @@ plt.xlabel('Wavelength (nm)')
 plt.ylabel('Normalized Intensity')
 plt.title('Azulene Fluorescence (MOMAP TVCF)')
 plt.gca().invert_xaxis()
-plt.savefig('azulene_spectrum.png', dpi=150)
+output = Path('azulene_spectrum.png')
+if output.exists() or output.is_symlink():
+    raise FileExistsError(f'Refusing to overwrite {output}')
+plt.savefig(output, dpi=150)
 ```
 
 ---
@@ -93,10 +130,22 @@ plt.savefig('azulene_spectrum.png', dpi=150)
 
 ### Find Ead
 
+Do not subtract the last S1-log SCF reference from the S0 total energy. In a
+Gaussian linear-response TDDFT log, that SCF value is the reference-state
+energy at the S1 geometry. The state-1 total-energy estimate is
+
+```text
+E_S1,total(R_S1) = E_reference,SCF(R_S1) + omega_S1(R_S1)
+Ead = E_S1,total(R_S1) - E_S0,total(R_S0)
+```
+
+Both terms must use the same electronic-structure convention. The bundled
+extractor implements this formula and fails if the final state-1 excitation is
+missing:
+
 ```bash
-E_S0=$(grep "SCF Done" s0.log | tail -1 | awk '{print $5}')
-E_S1=$(grep "SCF Done" s1.log | tail -1 | awk '{print $5}')
-python3 -c "print(f'Ead = {float('$E_S1') - float('$E_S0'):.8f} au')"
+python3 "${MOMAP_SKILL_DIR:?Set MOMAP_SKILL_DIR}/tools/extract.py" \
+  --s0 s0.log --s1 s1.log --json
 ```
 
 ### Find EDMA (vertical absorption TDM)
@@ -122,107 +171,112 @@ tac s1.log | grep -A5 "transition electric dipole" -m1
 
 ## Example 3: TADF Molecule ISC Workflow
 
-For a TADF candidate from green_100k or blue_10k screening:
+This example uses the bundled fail-closed pipeline. It has not been run by this
+repository's CI because MOMAP is licensed. Use a new output root and preserve
+the Gaussian sources unchanged.
 
 ```bash
-WORKDIR=~/momap_tadf/mol_07566
-mkdir -p $WORKDIR && cd $WORKDIR
+MOMAP_SKILL_DIR=/absolute/path/to/quantum-chem-skills/momap
+SOURCE_DIR=/absolute/path/to/validated/gaussian-outputs
+OUTPUT_ROOT=/absolute/path/to/new-momap-results
 
-# 1. Run Gaussian (or use existing .log from Stage 3)
-# S0 opt+freq: already done → s0.log + s0.chk
-# T1 opt+freq: already done → t1.log + t1.chk
-# S1 TDDFT:     needed      → s1.log + s1.chk
+: "${MOMAP_ENV:?Set MOMAP_ENV to the licensed installation env.sh}"
+: "${HSO_CM1:?Set a computed or measured SOC in cm^-1}"
+test ! -e "$OUTPUT_ROOT" && test ! -L "$OUTPUT_ROOT" || exit 1
+test ! -e "$OUTPUT_ROOT-result.json" && \
+  test ! -L "$OUTPUT_ROOT-result.json" || exit 1
+source "$MOMAP_ENV"
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact verified 2024A full-line runtime banner}"
 
-# 2. Convert chk → fchk
-formchk s0.chk s0.fchk
-formchk t1.chk t1.fchk
-formchk s1.chk s1.fchk
-
-# 3. EVC for S1→S0 (fluorescence)
-cat > momap_evc_s1.inp << 'EOF'
-do_evc = 1
-&evc
-  ffreq(1) = "s0.log"
-  ffreq(2) = "s1.log"
-/
-EOF
-source "${MOMAP_ENV:-$MOMAP_ROOT/env.sh}"
-python momap_patched -i momap_evc_s1.inp
-
-# 4. ISC rate (S1 → T1)
-cat > momap_isc.inp << 'EOF'
-do_isc = 1
-&isc
-  ffreq(1) = "s1.log"
-  ffreq(2) = "t1.log"
-  Temp     = 300 K
-/
-EOF
-python momap_patched -i momap_isc.inp
-
-# 5. Spectrum
-cat > momap_spec.inp << 'EOF'
-do_spec_tvcf_ft   = 1
-do_spec_tvcf_spec = 1
-&spec_tvcf
-  DUSHIN  = .t.
-  Temp    = 300 K
-  tmax    = 5000 fs
-  dt      = 0.001 fs
-  Ead     = 0.075 au     ← REPLACE with actual value
-  EDMA    = 0.93 debye   ← REPLACE
-  EDME    = 0.65 debye   ← REPLACE
-  DSFile  = "evc.cart.dat"
-  Emax    = 0.3 au
-  dE      = 0.00001 au
-  FoSFile = "spec.tvcf.spec.dat"
-/
-EOF
-echo "localhost slots=4" > nodefile
-python momap_patched -i momap_spec.inp
+# Each .log must have its matching .fchk. Generate missing .fchk files from
+# the corresponding .chk with formchk before launching the pipeline, using a
+# new target name that has passed the same -e/-L guard.
+python3 "$MOMAP_SKILL_DIR/tools/tadf.py" mol_07566 \
+  --s0 "$SOURCE_DIR/s0.log" \
+  --s1 "$SOURCE_DIR/s1.log" \
+  --t1 "$SOURCE_DIR/t1.log" \
+  --temperature 300 \
+  --hso-cm1 "$HSO_CM1" \
+  --output "$OUTPUT_ROOT" \
+  --json-output "$OUTPUT_ROOT-result.json" \
+  --expected-build "$MOMAP_BUILD" \
+  --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+  --expected-version-banner "$MOMAP_VERSION_BANNER"
 ```
+
+The pipeline computes the signed gap as
+
+```text
+delta_EST_signed = E_S1,total - E_T1,SCF
+```
+
+where the T1 term is the final Gaussian `SCF Done` total electronic energy at
+the T1 geometry. It does not apply `abs()`. A non-positive gap fails requested
+ISC until the state and energy conventions are reviewed.
+
+Accepted outputs are isolated as follows:
+
+```text
+mol_07566/
+  evc_s1_s0/   # fluorescence EVC + stage_receipt.json
+  spectrum/    # copied S1-S0 EVC data + spectrum receipt
+  evc_s1_t1/   # ISC EVC + independent evc.cart.dat + receipt
+  isc/         # copied S1-T1 EVC data + ISC rates + receipt
+```
+
+For this repository's MOMAP 2024A-style fixture, acceptance requires the exact
+completion strings documented in `SKILL.md`, fresh non-empty output files,
+positive EVC atom/mode counts, a complete strict seven-column spectrum table,
+and finite ISC/RISC rates with explicit `s^-1` units. Labelled rate records must
+contain exactly one ISC and one RISC entry; the versioned unlabeled fallback is
+exactly two lines in `ISC, RISC` order. A zero process exit alone is
+insufficient.
 
 ---
 
-## Example 4: MPI Workaround Summary
+## Example 4: MPI Launcher Compatibility
 
-The `-machinefile` issue affects all MPI-based calculations (spec_tvcf, ISC, IC).
+Some MOMAP launchers use `-machinefile`, while newer OpenMPI releases expect
+`--hostfile`. Do not patch the licensed launcher in place or install a
+long-lived hand-edited copy. The bundled runner reads the original launcher,
+creates a private mode-0700 temporary copy with the compatibility substitution,
+and uses it only for the current local process or fresh Slurm work directory:
 
-**Permanent fix** (do once per MOMAP session):
 ```bash
-# Create patched momap
 source "${MOMAP_ENV:-$MOMAP_ROOT/env.sh}"
-mkdir -p ~/bin
-cp $MOMAP_BIN/momap ~/bin/momap_patched
-sed -i 's/-machinefile/--hostfile/g' ~/bin/momap_patched
-
-# Create proper hostfile
-echo "localhost slots=4" > ~/nodefile
-cp ~/nodefile .  # copy to each working directory
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact verified 2024A full-line runtime banner}"
+test -d "$PWD"
+test -s momap.inp
+python3 "${MOMAP_SKILL_DIR:?Set MOMAP_SKILL_DIR}/tools/runner.py" \
+  momap.inp --workdir "$PWD" \
+  --expected-build "$MOMAP_BUILD" \
+  --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+  --expected-version-banner "$MOMAP_VERSION_BANNER"
 ```
 
-**Or submit via Slurm to avoid MPI issues:**
-```bash
-#!/bin/bash
-#SBATCH --job-name=momap_spec
-#SBATCH --partition=YOUR_PARTITION
-#SBATCH --nodes=1
-#SBATCH --ntasks=4
-#SBATCH --time=12:00:00
-
-source "${MOMAP_ENV:-$MOMAP_ROOT/env.sh}"
-export OMPI_MCA_rmaps_base_oversubscribe=1
-mpirun --hostfile nodefile -np 4 $MOMAP_BIN/TVCORF_SPEC_para.exe momap.inp
-```
-
-Note: The Slurm cluster's MPI setup may differ. Test serial `TVCORF_SPEC.exe` first.
+For Slurm, add `--slurm --nprocs 4` and use `--partition` only when the site
+administrator has supplied one. Run in a new stage directory because MOMAP and
+the scheduler use conventional output, nodefile, and submission-script names.
+The site's MPI setup may differ; test the documented serial executable first.
 
 ---
 
 ## Available Test Cases
 
 ```bash
-ls /opt/MOMAP-2024A/tests/
+ls "${MOMAP_ROOT:?Set MOMAP_ROOT}/tests/"
 # azulene/     — C₁₀H₈, 18 atoms, all job types (gaussian, orca, qchem, turbomole, bdf)
 # Irppy3/      — Ir complex, ISC/phos (gaussian, dalton)
 # porphine/    — C₂₀H₁₄N₄, large molecule (gaussian, gaussian_g16, evc_g16)

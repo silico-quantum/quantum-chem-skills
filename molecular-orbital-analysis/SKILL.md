@@ -1,315 +1,226 @@
 ---
 name: molecular-orbital-analysis
-description: Use when analyzing and visualizing molecular orbitals with PySCF, Multiwfn, and PyMOL-compatible outputs.
+description: Use when generating, validating, and visualizing explicitly indexed molecular orbitals from converged closed-shell or open-shell PySCF calculations.
 license: MIT
-compatibility: Requires Python, PySCF, Multiwfn, and optionally PyMOL; installation details are platform-specific.
+compatibility: Requires Python 3.10+ and PySCF; rendering requires a cube-capable viewer, while Multiwfn is optional and version-dependent.
 ---
 
-# Molecular Orbital Analysis Workflow Guide
+# Molecular orbital analysis
 
-This skill describes a workflow for analyzing molecular orbitals with quantum
-chemistry calculations and visualization. It is a guide: this directory does
-not contain a complete automation program.
+Generate molecular-orbital cube files only from a converged, fully specified
+electronic-structure calculation. Keep the calculation, orbital identity, cube
+grid, and visualization settings traceable. Do not infer an open-shell frontier
+orbital from a closed-shell electron-count formula.
 
-## Overview
+## Prerequisites
 
-The workflow consists of three main steps:
-1. **PySCF** - Quantum chemistry calculation (HF/DFT)
-2. **Multiwfn** - Generate 3D orbital data (cube files)
-3. **PyMOL** - Professional visualization with molecular structure
+1. Use a Python environment with PySCF installed. Record the interpreter and
+   package versions before calculating:
 
-## Requirements
+   ```bash
+   python3 --version
+   python3 -c 'import pyscf; print(pyscf.__version__)'
+   ```
 
-### Software Installation
+2. Locate this skill directory and use
+   `scripts/generate_orbital_cubes.py`; the repository does not install a
+   global `molecular-orbital-analysis` executable.
+3. For images, install and version a viewer that reads Gaussian cube files,
+   such as VMD, ChimeraX, or PyMOL. Verify cube support in that exact build.
+4. Treat Multiwfn as optional. If it is used, record its version and follow the
+   matching upstream manual because interactive menu paths can change.
+5. Work in a new output directory. The bundled generator refuses to reuse one.
+   It reads the source XYZ bytes once, atomically publishes them as
+   `input.xyz` inside that directory, and parses only this immutable run
+   snapshot.
+
+## Input contract
+
+Supply all of the following before running:
+
+- a single-frame XYZ file with an exact atom count, one comment line, finite
+  coordinates, and an explicit coordinate unit (`Angstrom` or `Bohr`);
+- integer molecular **charge and spin**, where PySCF `spin` means
+  `Nalpha - Nbeta = 2S`, not spin multiplicity;
+- method, basis, and, for RKS or UKS, the exchange-correlation functional;
+- an SCF cycle limit and a new output directory;
+- every requested **orbital index** as a one-based `CHANNEL:INDEX` token;
+- cube grid points and margin; and
+- the intended positive and negative **isosurface** values for rendering.
+
+Restricted calculations use the `spatial` channel. Unrestricted calculations
+use separate `alpha` and `beta` channels. ROHF has spatial orbitals with
+open-shell occupations. Never label an orbital only as “HOMO” or “LUMO” when
+the spin channel and indexing convention are ambiguous.
+
+The XYZ format has no charge, spin, method, or provenance fields. Obtain those
+from an authoritative source or request them from the user; do not guess them
+from the geometry.
+
+RKS and UKS have no implicit functional in the supported runner. Supply
+`--xc` explicitly; omission fails before the output directory is created.
+
+The accepted manifest binds `input.sha256` to the run-local `input.xyz`, not to
+a later reread of the source path. A concurrent source edit therefore cannot
+change the geometry/hash pair used by the calculation.
+
+## Workflow
+
+### 1. Validate the electronic state
+
+Check that the charge and spin are chemically intended and compatible with the
+electron count:
+
+```text
+electron_count >= spin
+(electron_count - spin) is even
+```
+
+Use RHF/RKS only for `spin=0`. Use ROHF or UHF for an open-shell HF state and
+UKS for an open-shell Kohn-Sham state. Method selection is a scientific choice,
+not an automatic fallback.
+
+### 2. Run PySCF and inspect the orbital table
+
+First perform a calculation without requesting cubes. Replace `<skill-dir>`
+with the resolved path to this skill:
 
 ```bash
-# Python packages used by the examples
-python -m pip install pyscf numpy matplotlib
-
-# Verify separately installed external programs.
-command -v Multiwfn
-command -v pymol
+python3 <skill-dir>/scripts/generate_orbital_cubes.py molecule.xyz \
+  --output-dir inspect_run \
+  --unit Angstrom --charge 0 --spin 0 \
+  --method rks --xc pbe0 --basis def2-svp
 ```
 
-Install Multiwfn and PyMOL from their upstream distribution channels or a
-trusted platform package. Confirm the executable names and versions locally.
+The script writes `orbitals.csv` with channel, one-based index, energy in
+Hartree, and occupation. It writes cubes only after `mf.converged` is true.
+Select orbitals from this table using the scientific question and occupation;
+do not use `electron_count // 2` for unrestricted frontier selection.
+An accepted calculation also requires the explicitly configured `scf.chk` and
+`pyscf.log` to be fresh regular files, non-empty, and SHA-256-bound in
+`run.json`.
 
-### Environment Setup
+### 3. Generate explicitly indexed cubes
+
+Run a new calculation directory and repeat each desired orbital:
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
-export OMP_STACKSIZE=64000000
+python3 <skill-dir>/scripts/generate_orbital_cubes.py molecule.xyz \
+  --output-dir cube_run \
+  --unit Angstrom --charge 0 --spin 0 \
+  --method rks --xc pbe0 --basis def2-svp \
+  --orbital spatial:5 --orbital spatial:6 \
+  --grid-points 100 --margin-bohr 4.0
 ```
 
-## Complete Workflow
+For UHF or UKS, use explicit spin channels, for example `alpha:8` and
+`beta:7`. Each output name contains the channel and one-based index. The
+manifest records the input hash, PySCF version, convergence, energy,
+occupation, cube grid, exact finite payload count/range, and output hashes.
+All requests are checked before cube generation. Cubes are generated under
+`.partial` names and receive their final names only after every requested cube
+passes complete validation.
 
-### Step 1: Prepare Molecular Structure
+### 4. Render without changing scientific identity
 
-Create an XYZ file with molecular coordinates:
+Load the original geometry and its matching cube in a versioned viewer. Render
+paired surfaces at equal magnitudes, for example `+0.05` and `-0.05` in the
+cube field's value units. The value is only an example starting point, not a
+universal standard. Record:
 
-```xyz
-<n_atoms>
-<molecule_name>
-<element> <x> <y> <z>
-...
-```
+- cube filename and SHA-256;
+- channel and one-based orbital index;
+- positive and negative isosurface values;
+- colors, opacity, camera, crop, and viewer version; and
+- image dimensions and background.
 
-**Example - Water:**
-```xyz
-3
-Water molecule
-O    0.000000    0.000000    0.117489
-H    0.000000    0.757210   -0.469957
-H    0.000000   -0.757210   -0.469957
-```
+Use identical grid and isosurface settings for comparative figures. A visually
+larger lobe after changing the isovalue is not evidence of a larger orbital
+coefficient.
 
-### Step 2: Quantum Chemistry Calculation (PySCF)
+### 5. Optional Multiwfn analysis
 
-Use the template script:
+If analysis beyond direct PySCF cube generation is needed, export a Molden file
+from the same accepted PySCF state with the official PySCF Molden API, then use
+that file with Multiwfn. Before automation, save an
+interactive transcript for the exact Multiwfn version, confirm the selected
+orbital/channel in its output, and test the batch input on a small fixture.
+Do not reuse an undocumented numeric menu sequence from another release.
 
-```python
-#!/usr/bin/env python3
-from pyscf import dft, gto, scf
-from pyscf.tools import molden
+## Validation and acceptance
 
-# Create molecule
-mol = gto.M(
-    atom='<xyz_coordinates_or_file>',
-    basis='6-31G*',  # or 'cc-pVDZ', 'def2-TZVP', etc.
-    charge=0,
-    spin=0,  # 0 for closed-shell
-    verbose=3
-)
+Accept a calculation only when all checks pass:
 
-# Perform calculation
-# Hartree-Fock example:
-mf = scf.RHF(mol)
+1. The strict XYZ parser reads only run-local `input.xyz`; its declared atom
+   count and values are valid, and its hash matches `input.sha256`.
+2. Charge, spin, method, basis, functional, units, and PySCF version are present
+   in `run.json`.
+3. `calculation.converged` is `true`; a finite printed energy alone is not SCF
+   convergence.
+4. Every cube request matches the calculation type: `spatial` for restricted,
+   and `alpha` or `beta` for unrestricted orbitals.
+5. Each one-based orbital index exists and its energy and occupation agree
+   with `orbitals.csv`.
+6. Every cube has complete finite origin, axis, atom-record, and scalar-payload
+   fields; its atom count matches the input, its grid dimensions are positive,
+   its payload contains exactly `nx * ny * nz` values, and its SHA-256 matches
+   the manifest.
+7. The viewer loads the molecule and both signed isosurfaces without parser
+   errors; the rendered structure aligns with the cube atom records.
+8. Comparative images use the declared common grid and absolute isosurface
+   magnitude, unless a difference is explicitly justified.
+9. `scf.chk` and `pyscf.log` are fresh for this run, non-empty, regular files,
+   and their byte sizes, modification times, and SHA-256 values appear under
+   `runtime_artifacts`.
 
-# For a DFT calculation instead, use for example:
-# mf = dft.RKS(mol)
-# mf.xc = 'PBE0'
-mf.kernel()
+For publication, also preserve the input, `pyscf.log`, `scf.chk`,
+`orbitals.csv`, cubes, `run.json`, render settings, and final images.
 
-# Output results
-print(f"Total energy: {mf.e_tot:.8f} Hartree")
-nocc = mol.nelectron // 2
-print(f"HOMO energy: {mf.mo_energy[nocc-1]*27.2114:.3f} eV")
-print(f"LUMO energy: {mf.mo_energy[nocc]*27.2114:.3f} eV")
+## Failure handling
 
-# Generate molden file
-molden.from_mo(mol, 'molecule.molden', mf.mo_coeff)
-```
+| Failure | Required response |
+|---|---|
+| XYZ atom count, symbol, coordinate, or unit is invalid | Stop before PySCF; repair the source input and retain its provenance. |
+| Charge and spin fail the electron-parity check | Stop and obtain the intended electronic state; do not change spin automatically. |
+| Restricted method requested with nonzero spin | Stop and select an appropriate open-shell method explicitly. |
+| SCF does not converge | Mark the run failed and generate no accepted cube. Diagnose the state, initial guess, method, basis, and convergence settings in a new run. |
+| Run-local input snapshot publication or hash check fails | Reject the run and preserve the partial/snapshot inventory; never fall back to rereading a mutable source path. |
+| `scf.chk` or `pyscf.log` is missing, empty, stale, or not a regular file | Reject the run even when `mf.converged` is true; retain the artifact inventory and diagnose the PySCF output configuration. |
+| Requested channel or orbital index does not exist | Use `orbitals.csv` to select a valid explicit channel and index; do not renumber silently. |
+| Cube header, atom records, payload, grid, or hash fails | Reject every unpublished `.partial` cube, preserve the failed-run artifact inventory, and rerun in a new output directory after resolving the cause. The bundled CLI does not reload a checkpoint. |
+| Positive or negative isosurface is missing | Check sign, level, and viewer parsing; do not present a one-sign image as the complete orbital. |
+| Multiwfn batch path differs from the installed version | Stop automation and re-establish the menu path interactively against the matching manual. |
 
-### Step 3: Generate Orbital Data (Multiwfn)
+## Output and reporting
 
-Create input file for Multiwfn:
+Report, at minimum:
 
-```bash
-cat > multiwfn_input.txt << 'EOF'
-molecule.molden
-200
-3
-<orbital_index>
-2
-1
-0
-q
-EOF
+- original source path, run-local input snapshot path/hash/byte size, atom
+  count, coordinate units, charge, and PySCF spin;
+- PySCF/Python versions, method, functional, basis, convergence, cycle limit,
+  and total energy in Hartree;
+- orbital channel, one-based orbital index, occupation, and energy in Hartree;
+- cube path/hash, atom count, grid dimensions, grid margin, exact payload value
+  count/range, and byte size;
+- fresh `scf.chk` and `pyscf.log` paths, byte sizes, modification times, and
+  SHA-256 values;
+- viewer/version, signed isosurface values, colors, opacity, camera, and output
+  image dimensions; and
+- acceptance status, failure phase, rejected/partial artifact inventory, failed
+  checks, scientific assumptions, and any optional Multiwfn
+  version/transcript.
 
-OMP_STACKSIZE=64000000 Multiwfn < multiwfn_input.txt
-```
-
-**Finding orbital indices:**
-- HOMO index = `nelectron // 2`
-- LUMO index = HOMO + 1
-
-**Output:** `orb<index>.cub` file containing 3D orbital data
-
-### Step 4: Visualization (PyMOL)
-
-Create PyMOL script:
-
-```python
-import pymol
-from pymol import cmd
-
-pymol.finish_launching(['pymol', '-cq'])
-
-# Load molecule
-cmd.load('molecule.xyz', 'mol')
-cmd.show('spheres', 'mol')
-cmd.show('sticks', 'mol')
-cmd.color('red', 'elem O')
-cmd.color('white', 'elem H')
-cmd.set('sphere_scale', 0.3)
-
-# Load orbital
-cmd.load('orbital.cub', 'orbital')
-cmd.isosurface('surf_pos', 'orbital', level=0.05)
-cmd.isosurface('surf_neg', 'orbital', level=-0.05)
-cmd.color('blue', 'surf_pos')
-cmd.color('red', 'surf_neg')
-cmd.set('transparency', 0.4, 'surf_pos')
-cmd.set('transparency', 0.4, 'surf_neg')
-
-# Render
-cmd.bg_color('white')
-cmd.zoom(complete=1)
-cmd.png('orbital.png', width=1400, height=1050, dpi=150, ray=1)
-
-cmd.quit()
-```
-
-## Automation Skeleton
-
-The following skeleton illustrates orchestration only. The Multiwfn and PyMOL
-sections are placeholders and must be implemented and validated before use.
-
-```python
-#!/usr/bin/env python3
-"""
-Molecular orbital analysis pipeline skeleton
-Usage: python analyze_molecule.py molecule.xyz
-"""
-import sys
-import subprocess
-from pathlib import Path
-from pyscf import gto, scf
-from pyscf.tools import molden
-import pymol
-from pymol import cmd
-
-def analyze_molecule(xyz_file, basis='6-31G*', homo_only=False):
-    """Run the implemented portions of the orbital-analysis skeleton."""
-
-    # Step 1: Quantum chemistry calculation
-    print("=" * 60)
-    print("Step 1: Quantum Chemistry Calculation")
-    print("=" * 60)
-
-    mol = gto.M(atom=xyz_file, basis=basis, charge=0, spin=0, verbose=3)
-    mf = scf.RHF(mol)
-    mf.kernel()
-
-    # Generate molden file
-    molden_file = Path(xyz_file).stem + '.molden'
-    molden.from_mo(mol, molden_file, mf.mo_coeff)
-
-    # Step 2: Generate cube files with Multiwfn
-    print("\n" + "=" * 60)
-    print("Step 2: Generating Orbital Data")
-    print("=" * 60)
-
-    nocc = mol.nelectron // 2
-    orbitals = [nocc, nocc+1] if not homo_only else [nocc]
-
-    for orb_idx in orbitals:
-        print(f"Generating cube file for orbital {orb_idx}...")
-        # Multiwfn input
-        # ... (automation code)
-
-    # Step 3: Visualization with PyMOL
-    print("\n" + "=" * 60)
-    print("Step 3: Visualization")
-    print("=" * 60)
-
-    # PyMOL visualization code
-    # ... (automation code)
-
-    print("\nImplemented steps complete; validate generated files before use.")
-
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print("Usage: python analyze_molecule.py molecule.xyz")
-        sys.exit(1)
-
-    analyze_molecule(sys.argv[1])
-```
-
-## Common Parameters
-
-### Basis Sets
-- **6-31G***: Pople split-valence basis with polarization
-- **cc-pVDZ**: Correlation-consistent double-zeta basis
-- **def2-TZVP**: Karlsruhe triple-zeta valence basis with polarization
-- **STO-3G**: Minimal basis, generally suitable only for demonstrations
-
-Choose and justify a basis for the target property and chemical system; this
-list is not an accuracy ranking.
-
-### Isosurface Levels
-- **0.05**: example starting value
-- **0.03**: lower-value surface that may show more diffuse regions
-- **0.08**: higher-value surface that emphasizes larger amplitudes
-
-Report the chosen value and use the same absolute positive and negative levels
-when comparing orbitals.
-
-### PyMOL Customization
-
-**Colors:**
-- Carbon: gray, cyan, green
-- Oxygen: red
-- Nitrogen: blue
-- Hydrogen: white
-
-**Zoom level:**
-- `cmd.zoom(complete=1)`: Fit entire molecule
-- `cmd.move('z', -5)`: Zoom in
-- `cmd.move('z', 5)`: Zoom out
-
-## Output Files
-
-Expected output structure after the placeholder steps have been implemented:
-```
-<molecule>/
-├── molecule.xyz           # Input structure
-├── molecule.molden        # Wavefunction file
-├── molecule_HOMO.cub     # HOMO 3D data
-├── molecule_LUMO.cub     # LUMO 3D data
-├── molecule_homo.png     # HOMO visualization
-└── molecule_lumo.png     # LUMO visualization
-```
-
-## Examples
-
-### Water (H₂O)
-- 10 electrons, 5 occupied orbitals
-- HOMO: Non-bonding orbital (lone pair on O)
-- LUMO: Antibonding orbital
-
-### Benzene (C₆H₆)
-- 42 electrons, 21 occupied orbitals
-- HOMO: π bonding orbital
-- LUMO: π* antibonding orbital
-- Characteristic delocalized π system
-
-## Troubleshooting
-
-### Multiwfn Issues
-- **"settings.ini not found"**: Warning only, uses defaults
-- **Slow calculation**: Use lower quality grid (option 1 or 2)
-
-### PyMOL Issues
-- **No output image**: Check if running in GUI mode
-- **Black images**: OpenGL issue, try `ray=0` instead of `ray=1`
-
-### PySCF Issues
-- **SCF not converging**: Try different initial guess or use DIIS
-- **Memory error**: Reduce basis set size or use density fitting
+Separate computed quantities from interpretation. Orbital shape and energy do
+not by themselves establish a reaction mechanism, excitation assignment, or
+charge-transfer rate.
 
 ## References
 
-- PySCF: https://pyscf.org/
-- Multiwfn: http://sobereva.com/multiwfn/
-- PyMOL: https://pymol.org/2/
-
-## Citation
-
-If using this workflow for publications, cite:
-
-1. **PySCF**: Q. Sun et al., PySCF: the Python‐based simulations of chemistry framework, Wiley Interdiscip. Rev. Comput. Mol. Sci. 8, e1340 (2018)
-
-2. **Multiwfn**: T. Lu, F. Chen, J. Comput. Chem. 33, 580 (2012) and T. Lu, J. Chem. Phys. 161, 082503 (2024)
-
-3. **PyMOL**: The PyMOL Molecular Graphics System, Version 3.1 Schrödinger, LLC.
+- [PySCF quickstart](https://pyscf.org/quickstart.html) — restricted and
+  open-shell SCF examples.
+- [PySCF tools API](https://pyscf.org/pyscf_api_docs/pyscf.tools.html) —
+  `pyscf.tools.cubegen.orbital` and cube-grid parameters.
+- [Multiwfn official site](http://sobereva.com/multiwfn/) — obtain the manual
+  matching the installed release.
+- [Gaussian Cube specification](https://h5cube-spec.readthedocs.io/en/latest/cubeformat.html)
+  — file structure and interoperability considerations.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MOMAP Photophysics"
+  short_description: "Run traceable MOMAP photophysics workflows"
+  default_prompt: "Use $momap to prepare and validate this MOMAP workflow, preserving physical inputs, units, provenance, and failure status."

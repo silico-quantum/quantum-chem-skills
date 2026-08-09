@@ -2,16 +2,20 @@
 """
 Spectrum - UV-Vis, CD, and Raman spectrum generation
 
-Supports:
+Historical claims (unvalidated):
     - UV-Vis absorption spectrum (TDDFT/TDA)
     - Circular dichroism (CD) spectrum
     - Emission spectrum
     - Stick spectrum → broadened spectrum
 
-Usage:
+Historical interface (disabled):
     python spectrum.py <xyz_file> <functional> [basis] [nstates]
     python spectrum.py water.csv b3lyp cc-pvdz 50
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -196,7 +200,3 @@ def main():
         run_cd(xyz_file, functional, basis, nstates)
     else:
         run_uvvis(xyz_file, functional, basis, nstates, sigma)
-
-
-if __name__ == '__main__':
-    main()

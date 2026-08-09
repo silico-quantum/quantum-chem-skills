@@ -1,5 +1,11 @@
 # PySCF and JAX Integration Guide
 
+> **Unvalidated historical draft.** Do not use this document as an executable
+> API guide. Array conversion alone does not make PySCF SCF calculations
+> differentiable, JIT-compatible, or GPU accelerated. Select a documented
+> differentiable/accelerator backend and validate it against the installed
+> versions. See [`../../tools/README.md`](../../tools/README.md).
+
 ## Overview
 
 JAX (Just Another eXecutor) is a high-performance numerical-computing library with automatic differentiation and JIT compilation. Integrating PySCF with JAX enables:

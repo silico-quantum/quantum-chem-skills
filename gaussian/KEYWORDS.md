@@ -1,93 +1,34 @@
-# Gaussian Keyword Reference
+# Conservative Gaussian keyword orientation
 
-This page is a compact orientation guide, not a substitute for the
-[official Gaussian keyword documentation](https://gaussian.com/keywords/).
-Confirm version-specific syntax before production calculations.
+Use this page only to locate a keyword family. The installed Gaussian manual is
+the authority for syntax, defaults, availability, and interactions. Do not copy
+a keyword into production input solely because it appears here.
 
-## Job Types
+| Need | Common family to verify | Acceptance consequence |
+|---|---|---|
+| Single-point energy | `SP` or the route default | Require SCF and normal termination |
+| Geometry optimization | `Opt` | Require optimization convergence |
+| Harmonic frequencies | `Freq` | Inspect negative modes and thermochemical conditions |
+| Transition-state search | `Opt=TS` | Require one intended negative mode; use IRC if needed |
+| Reaction path | `IRC` | Verify both directions and endpoint identities |
+| Excited states | `TD` | Verify state manifold, root, and state character |
+| Continuum solvent | `SCRF` | Record model and solvent printed by Gaussian |
+| Population analysis | `Pop` | Report scheme and basis dependence |
+| Wavefunction stability | `Stable` | Distinguish testing from `Stable=Opt` modification |
+| User basis or ECP | `Gen`, `GenECP`, `Pseudo` | Validate element coverage and section layout |
+| Geometry from checkpoint | `Geom=Check` or `Geom=AllCheck` | Verify which molecule fields are read |
+| Guess from checkpoint | `Guess=Read` | Verify checkpoint compatibility |
+| SCF recovery | `SCF` options | Diagnose first; change one justified option at a time |
 
-| Keyword | Purpose | Common options |
-|---------|---------|----------------|
-| SP | Single-point energy | Default |
-| Opt | Geometry optimization | `Opt=CalcFC`, `Opt=TS` |
-| Freq | Frequency analysis | `Freq=Raman` |
-| Scan | Potential-energy-surface scan | `Scan=Opt` |
-| IRC | Intrinsic reaction coordinate | `IRC=CalcFC` |
-| Polar | Polarizability | `Polar=EnOnly` |
+Frequently used Link 0 commands include `%Chk`, `%OldChk`, `%Mem`, and
+`%NProcShared`. Their values must agree with the actual scheduler allocation.
 
-## DFT Functionals
+Use the official pages for the relevant installed revision:
 
-| Functional | Type | Characteristic |
-|------------|------|----------------|
-| B3LYP | Hybrid | 20% Hartree–Fock exchange |
-| PBE0 | Hybrid | 25% Hartree–Fock exchange |
-| M06-2X | Meta-hybrid GGA | 54% Hartree–Fock exchange |
-| CAM-B3LYP | Range-separated hybrid | Long-range correction |
-| ωB97X-D | Range-separated hybrid with dispersion | Long-range correction and dispersion |
-
-Method suitability is system- and property-dependent; benchmark against an
-appropriate reference rather than choosing a functional from this table alone.
-
-## Basis Sets
-
-### Pople family
-
-- `6-31G`: split-valence double-zeta
-- `6-31G*`: double-zeta with polarization on non-hydrogen atoms
-- `6-31G**`: double-zeta with polarization on all atoms
-- `6-31+G*`: double-zeta with diffuse functions and polarization
-- `6-311G**`: split-valence triple-zeta with polarization
-
-### Correlation-consistent family
-
-- `cc-pVDZ`, `cc-pVTZ`, `cc-pVQZ`
-- `aug-cc-pVTZ` with diffuse augmentation
-
-### def2 family
-
-- `def2-SVP`, `def2-TZVP`, `def2-QZVP`
-
-## TDDFT Excited States
-
-```
-TD(NStates=10,Root=1,Singlets)
-```
-
-- `NStates`: number of excited states
-- `Root`: state selected for state-specific operations such as optimization
-- `Singlets` / `Triplets`: requested spin manifold
-
-## Solvent Effects (SCRF)
-
-```
-SCRF=(SMD,Solvent=Water)
-```
-
-Common solvent names include `Water`, `Ethanol`, `Acetonitrile`, `DMF`,
-`DMSO`, and `Toluene`.
-
-## Optimization Options
-
-- `Opt=CalcFC`: calculate force constants at the initial geometry
-- `Opt=TS`: search for a transition state
-- `Opt=Tight`: use tighter convergence criteria
-- `Opt=MaxStep=N`: set the maximum optimization step
-
-## SCF Convergence
-
-- `SCF=QC`: use quadratic convergence
-- `SCF=XQC`: start with the default procedure and fall back to quadratic convergence
-- `SCF=Tight`: use tighter SCF convergence criteria
-
-## Population Analysis (Pop)
-
-- `Pop=Full`: request expanded orbital information
-- `Pop=NBO`: request Natural Bond Orbital analysis when the required support is available
-- `Pop=NPA`: request Natural Population Analysis when supported
-- `Pop=MK`: fit Merz–Kollman electrostatic-potential charges
-
-## Link 0 Commands
-
-- `%chk=file.chk`: checkpoint file
-- `%mem=60GB`: memory allocation
-- `%nprocshared=64`: shared-memory worker count
+- [Keyword index](https://gaussian.com/keywords/)
+- [Link 0 commands](https://gaussian.com/link0/)
+- [Optimization](https://gaussian.com/opt/)
+- [Geometry input](https://gaussian.com/geom/)
+- [Frequency calculations](https://gaussian.com/freq/)
+- [TD excited states](https://gaussian.com/td/)
+- [SCRF solvent models](https://gaussian.com/scrf/)

@@ -2,15 +2,19 @@
 """
 CCSD - Coupled-Cluster Singles and Doubles
 
-Supports:
+Historical claims (unvalidated):
     - RCCSD (restricted closed-shell)
     - UCCSD (unrestricted open-shell)
     - CCSD(T) perturbative triples
 
-Usage:
+Historical interface (disabled):
     python ccsd.py <xyz_file> [basis]
     python ccsd.py n2.csv cc-pvdz
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -39,7 +43,7 @@ def run_ccsd(xyz_file, basis='cc-pvdz', with_t=True, charge=0, spin=0):
         basis: basis set
         with_t: if True, compute CCSD(T) correction
         charge: molecular charge
-        spin: spin multiplicity (0=closed-shell singlet)
+        spin: Nalpha - Nbeta = 2S (0=closed-shell singlet)
     """
     symbols, coords = read_xyz(xyz_file)
     atom_str = ' '.join(['%s %.10f %.10f %.10f' % (s, *c)
@@ -98,7 +102,3 @@ def main():
         spin = int(sys.argv[idx + 1])
     
     run_ccsd(xyz_file, basis, with_t, charge, spin)
-
-
-if __name__ == '__main__':
-    main()

@@ -2,17 +2,21 @@
 """
 CASSCF - Complete Active Space Self-Consistent Field
 
-Supports:
+Historical claims (unvalidated):
     - CASSCF (multi-configurational)
     - CASCI
     - CASPT2 (multi-state second-order perturbation)
     - NEVPT2 (N-Electron Valence Second-Order PT)
 
-Usage:
+Historical interface (disabled):
     python cascf.py <xyz_file> <ncas> <nelec> [basis] [nstates]
     python cascf.py butadiene.csv 4 4 cc-pvdz    # CAS(4,4) for butadiene
     python cascf.py ethylene.csv 2 2 6-31G*     # CAS(2,2) for ethylene pi system
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -162,7 +166,3 @@ def main():
             run_caspt2(result['mc'])
         else:
             run_nevpt2(result['mc'])
-
-
-if __name__ == '__main__':
-    main()

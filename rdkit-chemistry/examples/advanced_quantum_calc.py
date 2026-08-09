@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Illustrative benzene DFT, orbital, and vertical delta-SCF workflow."""
 
+from _legacy_guard import refuse_legacy_example
+
+refuse_legacy_example(__file__)
+
 import json
 import time
 

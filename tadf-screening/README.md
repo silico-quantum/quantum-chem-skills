@@ -14,11 +14,15 @@ For the separately maintained end-to-end project, see
 the per-molecule calculation to `../momap/tools/tadf.py`, ranks successful
 results against an emission window, and writes a Markdown report plus JSON.
 MOMAP and Gaussian are separately licensed external programs; this adapter
-does not install or validate them.
+does not install them. It validates only the documented launcher identity,
+runtime banner, Gaussian input, and stage-artifact contracts.
 
 Each Gaussian log must have a matching `.fchk`, or a matching `.chk` that can
 be converted with `formchk`. The adapter stages the log and formatted
 checkpoint together in the molecule work directory before invoking MOMAP.
+Every run must also supply the reviewed MOMAP build (`2024A`), SHA-256 of the
+original non-symlink launcher, and the exact full-line runtime version banner.
+The adapter passes all three expectations to every isolated stage.
 
 The adjacent `../momap/tools` directory is used by default. If the adapter is
 deployed separately, set `MOMAP_TOOLS_DIR` to the directory containing
@@ -28,17 +32,34 @@ Copilot installation path.
 ## Usage
 
 ```bash
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact verified 2024A full-line runtime banner}"
+
 # Single-molecule mode
 python stage4_momap.py --mol-id mol_07566 \
-    --s0 logs/s0.log --s1 logs/s1.log --t1 logs/t1.log
+    --s0 logs/s0.log --s1 logs/s1.log --t1 logs/t1.log \
+    --expected-build "$MOMAP_BUILD" \
+    --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+    --expected-version-banner "$MOMAP_VERSION_BANNER"
 
 # Run ISC only with an explicit, provenance-backed S1-T1 SOC value
 python stage4_momap.py --mol-id mol_07566 \
     --s0 logs/s0.log --s1 logs/s1.log --t1 logs/t1.log \
-    --hso-cm1 12.5
+    --hso-cm1 12.5 \
+    --expected-build "$MOMAP_BUILD" \
+    --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+    --expected-version-banner "$MOMAP_VERSION_BANNER"
 
 # Batch mode
-python stage4_momap.py candidates.csv --output stage4_output/ --target blue
+python stage4_momap.py candidates.csv --output stage4_output/ --target blue \
+    --expected-build "$MOMAP_BUILD" \
+    --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+    --expected-version-banner "$MOMAP_VERSION_BANNER"
 
 # CSV columns: mol_id,s0_log,s1_log,t1_log,hso_cm1
 ```

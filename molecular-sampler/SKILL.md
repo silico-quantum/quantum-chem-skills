@@ -1,119 +1,196 @@
 ---
 name: molecular-sampler
-description: Use when extracting molecular fragments from Gaussian GJF or XYZ geometries and generating deterministic nearest-neighbor monomer, dimer, trimer, tetramer, and pentamer samples.
+description: Use when separating nonperiodic molecular aggregates into distance-inferred fragments and preparing deterministic nearest-neighbor monomer through pentamer XYZ samples.
 license: MIT
-compatibility: Requires Python 3.7 or later, NumPy, and local access to the input geometry file.
+compatibility: Requires Python 3.10 or newer; accepts one-frame XYZ and Cartesian Gaussian GJF or COM files in angstrom for a limited element set.
+metadata:
+  version: "2.0.0"
 ---
 
 # Molecular Sampler
 
-Extract connected molecular fragments from a Gaussian GJF or XYZ geometry, write every detected monomer, and construct nearby multi-molecule complexes.
+Use the bundled standard-library CLI to split a nonperiodic aggregate into
+distance-inferred connected components and write deterministic local
+neighborhood samples. Treat every inferred fragment as a hypothesis until the
+component inventory has been checked against the source structure.
+
+## Prerequisites
+
+- Python 3.10 or newer; no third-party Python package is required.
+- A readable `.xyz`, `.gjf`, or `.com` file containing Cartesian coordinates.
+- An independently justified expected fragment count; the CLI requires it and
+  still requires review of the detailed inferred partition.
+
+Inspect the exact local interface before running it:
+
+```bash
+python3 molecular_sampler.py --help
+```
+
+Run from this skill directory or address `molecular_sampler.py` by an absolute
+path. Use a new output directory for every attempt.
+
+## Input contract
+
+### XYZ
+
+- Exactly one XYZ frame is accepted.
+- The first-line atom count must equal the number of non-empty coordinate
+  records after the comment line.
+- XYZ has no reliable unit or connectivity field. Confirm that coordinates are
+  in angstrom and pass `--xyz-units angstrom`; this is a declaration, not an
+  automatic unit check.
+- Every XYZ atom is assigned to the logical `L` layer. Use `--layer all` or the
+  default `--layer L`.
+
+### Gaussian GJF or COM
+
+- A recognizable charge and multiplicity line must precede a Cartesian
+  geometry block.
+- Exactly one Gaussian job section is accepted. Inputs containing `--Link1--`
+  or multiple recognizable geometry sections are rejected rather than
+  silently selecting one.
+- Standard Cartesian and ONIOM-style atom records with trailing `H`, `M`, or
+  `L` layer markers are supported. Z-matrices are not supported.
+- Gaussian input coordinates are treated as the default angstrom convention.
+  Files declaring `Units=Bohr` or `Units=AU` are rejected; convert them first.
+- The parser extracts geometry only. Charge, multiplicity, ONIOM link atoms,
+  periodic boundaries, and fragment charge/spin assignments are not propagated
+  into output XYZ files.
+
+The bundled covalent-radius table covers H, B, C, N, O, F, Si, P, S, Cl, Br,
+I, and Se. An unsupported element is an error. Connectivity is inferred using
+the distance cutoff
+`distance < bond_scale * (covalent_radius_i + covalent_radius_j)`; the default
+`bond_scale` is `1.3`. This rule is unsuitable as authoritative connectivity
+for salts, coordination complexes, reactive structures, periodic systems, or
+compressed snapshots.
 
 ## Workflow
 
-1. Confirm that the input is a `.gjf` or `.xyz` file.
-2. For an ONIOM GJF file, select the `H`, `L`, or `all` layer scope. XYZ atoms are assigned to the `L` layer by default.
-3. Choose an output directory and the maximum number of starting molecules to sample for each complex size.
-4. Run the sampler.
-5. Inspect `sampling_summary.txt` and spot-check the generated XYZ files before using them in downstream calculations.
+### 1. Preserve and characterize the source
 
-## Basic Usage
+Record the source filename, SHA-256, coordinate provenance, expected molecule
+count, selected ONIOM layer, and any known ions or coordination bonds. Do not
+edit the only copy of the source to make distance inference pass.
 
-Run the script from this skill directory:
+### 2. Run a bounded sample
 
-```bash
-python3 molecular_sampler.py <input_file> [options]
-```
-
-### Arguments
-
-- `input_file`: path to a Gaussian GJF or standard XYZ file.
-- `--output-dir`: output directory; default: `./molecular_samples`.
-- `--samples`: maximum number of starting molecules used for each multi-molecule sample type; default: `20`.
-- `--layer`: ONIOM layer selection: `H`, `L`, or `all`; default: `L`.
-
-### Examples
+For a six-molecule XYZ aggregate:
 
 ```bash
-# Sample the low-level layer from an ONIOM input.
-python3 molecular_sampler.py guest_monomer.gjf --layer L --samples 20
-
-# Process all atoms in an XYZ file and choose an output directory.
-python3 molecular_sampler.py structure.xyz --layer all --output-dir ./my_samples
+python3 molecular_sampler.py aggregate.xyz \
+  --xyz-units angstrom \
+  --layer all \
+  --expected-fragments 6 \
+  --bond-scale 1.3 \
+  --samples 20 \
+  --output-dir aggregate_samples_run01
 ```
 
-## Output Layout
+For an ONIOM low layer:
+
+```bash
+python3 molecular_sampler.py model.com \
+  --layer L \
+  --expected-fragments 12 \
+  --output-dir model_L_samples_run01
+```
+
+`--min-fragment-atoms` defaults to `1`, so small molecules and ions are
+retained. Setting a larger value is an explicit exclusion policy; every
+excluded component remains listed under `dropped_fragments` in the manifest.
+
+### 3. Understand the deterministic selection
+
+The tool:
+
+1. filters atoms by the selected layer;
+2. infers a bond graph using the declared distance cutoff;
+3. orders connected components by their smallest source atom index;
+4. computes each component's arithmetic coordinate centroid;
+5. for each starting component, selects its nearest `N - 1` centroid
+   neighbors for target sizes two through five;
+6. removes duplicate member-ID sets and stops at `--samples` unique sets for
+   each size.
+
+This is deterministic nearest-neighbor sampling, not random sampling, exhaustive
+combination enumeration, RMSD diversity selection, or thermodynamic sampling.
+If fewer than `N` fragments exist, the `N`-mer directory is intentionally empty;
+the tool never writes an undersized structure under an `N`-mer name.
+
+### 4. Review before downstream computation
+
+Inspect `sampling_manifest.json` first, then representative monomers and every
+complex that will be submitted. Assign charge and spin separately for each
+downstream quantum-chemistry job; XYZ output does not encode them.
+
+## Validation and acceptance
+
+Treat the generated files as internally validated only when all of the following
+hold:
+
+1. The process exits zero and the new output directory contains both
+   `sampling_manifest.json` and `sampling_summary.txt`.
+2. The manifest input SHA-256 matches the source, and `parsed_atom_count` and
+   `selected_atom_count` match the declared layer scope.
+3. The fragment count equals `--expected-fragments`; per-fragment atom counts,
+   formulas, and source indices match an independent chemical review.
+4. Retained and explicitly dropped source indices form a disjoint cover of all
+   selected atoms. No atom disappears silently.
+5. Every generated XYZ reparses, has a finite coordinate for every atom, and
+   its header atom count equals the sum for its member fragments.
+6. Every dimer through pentamer has exactly the molecule count indicated by its
+   directory, and member-ID tuples are unique within that size.
+7. Every generated XYZ is non-empty and its SHA-256 matches its manifest
+   record. Hash the final manifest and summary externally when archiving the
+   run because a file cannot contain its own stable checksum.
+
+The CLI performs strict input parsing, source-index coverage checks, output XYZ
+atom-count checks, and output hashing. It creates `RUN_INCOMPLETE` before
+writing artifacts and removes that marker only after the manifest and summary
+are completely published. A completed manifest uses
+`status: internal_validation_passed` and
+`scientific_status: pending_independent_fragment_review`. The chemical
+partition and inferred connectivity still require independent review; only that
+separate review may advance the scientific status to accepted.
+
+## Failure handling
+
+| Failure | Required response |
+|---|---|
+| Atom count, coordinate, unit, or element validation fails | Stop and repair or convert the source; do not weaken parsing. |
+| Detected fragment count differs from expectation | Preserve the report, inspect close contacts and source connectivity, and do not tune the cutoff solely to force the desired count. |
+| Salt, metal, periodic, or reactive connectivity is ambiguous | Use a tool that accepts authoritative molecule IDs or explicit bonds; this sampler has no explicit-connectivity input. |
+| A requested oligomer directory is empty | Confirm that enough fragments exist; never reinterpret a smaller complex as the requested size. |
+| Output directory already exists | Choose a new run directory; stale files are never accepted as current output. |
+| A write fails after directory creation | Treat any directory retaining `RUN_INCOMPLETE` as failed even if other files exist. Preserve it for diagnosis or move it aside before a new run. |
+
+## Output and reporting
+
+The output layout is:
 
 ```text
-molecular_samples/
-├── monomers/           # Every detected monomer
-│   ├── monomer_01.xyz
-│   ├── monomer_02.xyz
-│   └── ...
-├── dimers/             # Up to --samples structures
-├── trimers/            # Up to --samples structures
-├── tetramers/          # Up to --samples structures
-├── pentamers/          # Up to --samples structures
+run_directory/
+├── monomers/
+├── dimers/
+├── trimers/
+├── tetramers/
+├── pentamers/
+├── sampling_manifest.json
 └── sampling_summary.txt
 ```
 
-Each generated structure is a standard XYZ file. Its comment line records the sample index, molecule count, and atom count.
+Report the Python version, exact argv, sampler SHA-256, input name and SHA-256
+of the exact captured bytes that were parsed, declared
+units, parsed and selected atom counts, layer, bond-scale distance cutoff,
+minimum fragment size, expected and detected fragment counts, per-fragment
+formula/source indices, selection policy, member IDs, output atom counts and
+SHA-256 values, dropped fragments, warnings, internal validation status, and
+scientific review status. Report
+charge, multiplicity, and periodicity as `not_propagated` rather than guessing.
 
-## Implemented Sampling Method
+## References
 
-### Molecule Identification
-
-- Filter atoms by the selected ONIOM layer.
-- Infer bonds when the interatomic distance is less than `1.3 × (r1 + r2)`, where `r1` and `r2` are tabulated covalent radii.
-- Use a Union-Find connected-component algorithm to identify fragments.
-- Discard connected components containing fewer than five atoms.
-- Represent each retained molecule by the arithmetic mean of its atomic coordinates.
-
-### Multi-Molecule Sampling
-
-1. Calculate all pairwise distances between molecular coordinate centroids.
-2. Sort the neighbor list of each molecule by distance.
-3. For an N-molecule complex, combine each starting molecule with its nearest `N - 1` neighbors.
-4. Iterate over at most the first `--samples` molecules in deterministic coordinate-sorted order.
-
-This is deterministic nearest-neighbor sampling, not random or diversity-optimized sampling. The requested oligomer size also requires enough detected molecules; inspect the output rather than assuming every generated sample contains the target count.
-
-## Input Format
-
-A standard XYZ file has this form:
-
-```text
-<atom_count>
-<comment>
-<element> <x> <y> <z>
-...
-```
-
-Gaussian inputs must contain a geometry block that the bundled parser recognizes. ONIOM inputs must include valid `H` or `L` layer markers.
-
-## Dependencies
-
-- Python 3.7 or later
-- NumPy
-- Python standard-library modules: `argparse`, `collections`, `os`, `re`, and `sys`
-
-## Appropriate Uses
-
-- Extracting molecular clusters from crystal or aggregate geometries
-- Preparing nearby fragment complexes for quantum-chemistry calculations
-- Separating sufficiently disconnected molecular fragments in ONIOM or XYZ geometries
-
-## Validation Notes
-
-- Bond perception depends on the built-in covalent-radius table and a fixed `1.3` tolerance factor.
-- Components with fewer than five atoms are intentionally omitted, so the tool is unsuitable for retaining small molecules or ions without code changes.
-- The implementation evaluates all atom pairs during bond detection; large systems may require substantial runtime.
-- Review charge, multiplicity, chemical identity, and periodic-boundary effects independently before downstream calculations.
-
-## Extended Example
-
-See [Benzene cluster sampling](references/benzene-example.md) for a complete input-generation and sampling walkthrough.
-
-## Version History
-
-- **v1.0.0** (2026-03-03): initial release with monomer extraction, distance-sorted oligomer sampling, and standard XYZ output.
+- [Benzene dimer example](references/benzene-example.md)
+- Covalent radii embedded in [`molecular_sampler.py`](molecular_sampler.py)

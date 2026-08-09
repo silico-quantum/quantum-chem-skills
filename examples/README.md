@@ -109,7 +109,12 @@ Molecular sampling from benzene cluster (12 molecules, 144 atoms).
 
 ## xtb-cluster-md/
 
-GFN-FF molecular dynamics of benzene cluster (8 molecules, 96 atoms, 300 K, 5 ps).
+These are rejected historical artifacts from an attempted GFN-FF molecular
+dynamics run on a benzene cluster (8 molecules, 96 atoms, nominally 300 K and
+5 ps). The retained logs contain a thermostat problem and runtime exception,
+and the directory lacks both the original trajectory and the `xtbmdok` marker.
+The nominal settings and GIFs therefore do not establish a completed or
+scientifically accepted MD run.
 
 ### xTB MD Settings
 - Method: GFN-FF
@@ -117,12 +122,15 @@ GFN-FF molecular dynamics of benzene cluster (8 molecules, 96 atoms, 300 K, 5 ps
 - Time: 5 ps, step: 2 fs
 - NVT ensemble
 
-### Generated Animations
-| File | Description | Frames |
+### Rejected Historical Animations
+| File | Historical rendering description | Frames |
 |------|-------------|--------|
-| `benzene_com.gif` | COM motion overview | 20 |
+| `benzene_com.gif` | Arithmetic coordinate-centroid motion; despite the legacy filename, this is not center-of-mass motion | 20 |
 | `benzene_full.gif` | Full atom-level | 20 |
 | `benzene_local.gif` | Local cluster subset with bonds | 50 |
+
+Frame counts describe only the saved GIFs. They are not evidence of trajectory
+coverage, requested-time completion, or a validated molecular ensemble.
 
 ### Files
 - `benzene_N8_init.xyz` — Initial random cluster

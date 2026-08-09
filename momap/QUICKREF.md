@@ -3,8 +3,16 @@
 ## Load
 
 ```bash
-source "${MOMAP_ENV:-/opt/MOMAP-2024A/env.sh}"  # Installation environment
-module load "${MOMAP_MODULE:-momap/2024A-openmpi}"  # Site-specific alternative
+: "${MOMAP_ENV:?Set MOMAP_ENV to the licensed installation env.sh}"
+source "$MOMAP_ENV"
+# Or load the site-specific module documented by the local administrator.
+MOMAP_BUILD=2024A
+MOMAP_LAUNCHER=$(command -v momap)
+test -f "$MOMAP_LAUNCHER" && test ! -L "$MOMAP_LAUNCHER" || exit 1
+MOMAP_LAUNCHER_SHA256=$(python3 -c \
+  'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+  "$MOMAP_LAUNCHER")
+: "${MOMAP_VERSION_BANNER:?Set the exact verified 2024A full-line runtime banner}"
 ```
 
 ## Input Format Summary
@@ -30,6 +38,9 @@ do_evc = 1
 ```
 
 Output: `evc.cart.dat`, `evc.dint.dat`, `evc.out`
+
+Automated acceptance requires fresh, non-empty `evc.out` and `evc.cart.dat`,
+positive atom/mode counts, and `Normal finish of evc calculation` in `evc.out`.
 
 ## spec_tvcf Quick Template
 
@@ -66,6 +77,7 @@ E_S1_EXC_EV=$(grep "Excited State[[:space:]]*1:" s1.log | tail -1 | awk '{for (i
 grep -A5 "transition electric dipole" s1.log
 
 # Generate fchk
+test ! -e job.fchk && test ! -L job.fchk || exit 1
 formchk job.chk job.fchk
 ```
 
@@ -80,13 +92,54 @@ formchk job.chk job.fchk
 | `spec.tvcf.ft.dat` | Time correlation function FT | Debug |
 | `evc.vib1.xyz` | Vibration mode XYZ | Visualization |
 
-## MPI Patch (for OpenMPI 3.x)
+## Fail-closed TADF stage layout
+
+`tools/tadf.py` refuses an existing molecule output directory and isolates each
+producer of fixed MOMAP filenames:
+
+```text
+<output>/<molecule>/
+  evc_s1_s0/   stage_receipt.json
+  spectrum/    stage_receipt.json
+  evc_s1_t1/   stage_receipt.json
+  isc/         stage_receipt.json
+```
+
+The receipts bind accepted inputs and outputs to SHA-256 hashes, sizes, and
+timestamps. They also record build, exact version banner, original launcher
+SHA-256, patched launcher SHA-256, and the MPI replacement contract.
+`evc.cart.dat` is copied forward only after its producing EVC stage passes
+acceptance.
+
+Completion markers for the repository's MOMAP 2024A-style fixture are:
+
+| Stage | File | Required marker |
+|---|---|---|
+| EVC | `evc.out` | `Normal finish of evc calculation` |
+| spectrum | `spec.tvcf.log` | `Normal finish of spec_tvcf calculation` |
+| ISC | `isc.tvcf.log` | `Normal finish of isc_tvcf calculation` |
+
+Other releases fail closed until their local output is reviewed and tested.
+
+## MPI Launcher Compatibility
+
+Do not modify the licensed launcher or keep a permanent hand-edited copy. The
+bundled runner creates a private mode-0700 temporary launcher, applies the
+`-machinefile` to `--hostfile` compatibility substitution there, and leaves the
+original untouched. Give it a fresh work directory because MOMAP uses fixed
+output names:
 
 ```bash
-cp $MOMAP_BIN/momap momap_patched
-sed -i 's/-machinefile/--hostfile/g' momap_patched
-echo "localhost slots=4" > nodefile
-python momap_patched -i momap.inp
+SOURCE_INPUT="$PWD/momap.inp"
+RUN_DIR="$PWD/momap_mpi_run_001"
+test -s "$SOURCE_INPUT"
+test ! -e "$RUN_DIR" && test ! -L "$RUN_DIR" || exit 1
+mkdir "$RUN_DIR"
+python3 "${MOMAP_SKILL_DIR:?Set MOMAP_SKILL_DIR}/tools/runner.py" \
+  "$SOURCE_INPUT" --workdir "$RUN_DIR" \
+  --expected-build "$MOMAP_BUILD" \
+  --expected-launcher-sha256 "$MOMAP_LAUNCHER_SHA256" \
+  --expected-version-banner "$MOMAP_VERSION_BANNER"
 ```
 
 ## Spectrum Data Columns
@@ -97,10 +150,17 @@ python momap_patched -i momap.inp
 
 Plot column 4 vs column 6 (emission) or 4 vs 5 (absorption).
 
+The automated parser requires explicit `expected_build=2024A` plus verified
+launcher/run evidence before accepting exactly seven numeric columns on
+every non-comment data row, at least three finite rows, a strictly monotonic eV
+axis, an oppositely ordered wavelength axis, and `E(eV) * wavelength(nm)` within
+1% of `hc`. Tail diagnostics, partial rows, extra columns, non-finite values,
+and fatal text fail the spectrum stage.
+
 ## Bundled Tests
 
 ```bash
-ls "$MOMAP_ROOT/tests/"
+ls "${MOMAP_ROOT:?Set MOMAP_ROOT}/tests/"
 # azulene/  Irppy3/  porphine/  transport/  numfreq/  pysoc/
 # Each: gaussian/  kr/  kic/  kisc/  evc/  sumstat/
 ```
@@ -114,11 +174,21 @@ do_isc_tvcf_spec = 1
 &isc_tvcf
   DUSHIN  = .t.           Temp  = 298 K
   tmax    = 5000 fs       dt    = 0.001 fs
-  Ead     = 0.094 au      Hso   = 116.9 cm-1  ← from PySOC
+  Ead     = 0.094 au      Hso   = 116.9 cm-1  ← named computed/measured source
   DSFile  = "evc.cart.dat"
   Emax    = 0.3 au
 /
 ```
+
+For the bundled pipeline, `Ead = E_S1,total - E_T1,SCF` is signed and expected
+to be positive. `E_T1,SCF` is the final Gaussian `SCF Done` total electronic
+energy at the T1 geometry. Never use `abs(E_S1 - E_T1)`. A requested ISC stage
+is accepted only when fresh non-empty files contain the completion marker and
+two finite rates with explicit `s^-1` units. The local unlabeled two-line 2024A
+format is enabled only with an explicit verified 2024A build and is recorded as
+`first=ISC, second=RISC`. Labelled output must contain
+exactly one ISC and one RISC record; duplicates, conflicts, mixed labelled and
+unlabelled records, or extra fallback rate lines are rejected.
 
 ### ic_tvcf (internal conversion)
 ```

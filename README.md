@@ -11,10 +11,10 @@ This repository is a toolbox, not a single Python package. Each installable skil
 
 | Skill | Primary use | External software commonly required |
 |---|---|---|
-| [`gaussian`](gaussian/) | Gaussian input, job, and analysis guidance | Gaussian 16 |
-| [`molecular-orbital-analysis`](molecular-orbital-analysis/) | PySCF-to-Multiwfn/PyMOL orbital workflow | PySCF, Multiwfn, PyMOL |
-| [`molecular-sampler`](molecular-sampler/) | Extract and sample molecular assemblies | Python, NumPy |
-| [`momap`](momap/) | MOMAP photophysics and transport workflows | MOMAP |
+| [`gaussian`](gaussian/) | Gaussian input, job, and analysis guidance | Licensed Gaussian installation |
+| [`molecular-orbital-analysis`](molecular-orbital-analysis/) | Indexed orbital cubes and visualization | PySCF; cube viewer; optional Multiwfn |
+| [`molecular-sampler`](molecular-sampler/) | Extract and sample molecular assemblies | Python 3.10+ standard library |
+| [`momap`](momap/) | MOMAP EVC, spectrum, and ISC workflows | Licensed MOMAP and Gaussian installations |
 | [`multiwfn`](multiwfn/) | Wavefunction and real-space analysis | Multiwfn |
 | [`pyscf`](pyscf/) | Electronic-structure calculations with PySCF | PySCF, NumPy, SciPy |
 | [`rdkit-chemistry`](rdkit-chemistry/) | Molecular construction, conformers, and descriptors | RDKit |
@@ -31,6 +31,8 @@ Clone the repository and choose a skill directory. The following Codex example i
 git clone https://github.com/silico-quantum/quantum-chem-skills.git
 cd quantum-chem-skills
 mkdir -p /path/to/project/.agents/skills
+test ! -e /path/to/project/.agents/skills/pyscf && \
+  test ! -L /path/to/project/.agents/skills/pyscf || exit 1
 ln -s "$PWD/pyscf" /path/to/project/.agents/skills/pyscf
 ```
 
@@ -41,7 +43,7 @@ Use a different destination for each agent client:
 | [OpenAI Codex](https://developers.openai.com/codex/skills/) | `.agents/skills` | `~/.agents/skills` |
 | [Claude Code](https://code.claude.com/docs/en/skills) | `.claude/skills` | `~/.claude/skills` |
 | [OpenClaw](https://docs.openclaw.ai/tools/skills) | `<workspace>/skills` or `<workspace>/.agents/skills` | `~/.agents/skills` for the default state, or managed `<state-dir>/skills` (default: `~/.openclaw/skills`) |
-| [GitHub Copilot](https://docs.github.com/en/copilot/customizing-copilot/extending-copilot-chat-with-skills) | `.github/skills`, `.agents/skills`, or `.claude/skills` | `~/.copilot/skills` or `~/.agents/skills` |
+| [GitHub Copilot](https://docs.github.com/en/copilot/reference/customization-cheat-sheet) | `.github/skills`, `.agents/skills`, or `.claude/skills` | `~/.copilot/skills` or `~/.agents/skills` |
 
 OpenClaw applies realpath-containment checks to workspace and project skill
 roots. Use its local installer or copy the skill into those roots unless the
@@ -58,15 +60,26 @@ symbolic-link commands, plus optional scientific software setup.
 The helpers can also be run without installing an agent skill:
 
 ```bash
-# Inspect the molecular sampler interface.
+# Inspect the molecular sampler interface; an actual XYZ run must declare units.
 python3 molecular-sampler/molecular_sampler.py --help
 
 # Build an initial molecular cluster.
+set -e
+test ! -e cluster_build_run01
+mkdir cluster_build_run01
 python3 xtb-cluster-md/scripts/build_cluster.py \
-  --sdf molecule.sdf -n 24 -o cluster.xyz
+  --sdf molecule.sdf \
+  --monomer-id "verified monomer identifier" \
+  --coordinate-provenance "saved 3D source and preparation record" \
+  --molecules 24 --box 40.0 \
+  --min-distance 2.0 --max-neighbor-distance 8.0 --seed 42 \
+  --out cluster_build_run01/cluster.xyz \
+  --manifest cluster_build_run01/cluster_build.json
 
 # Render an XYZ structure after installing xyzrender.
-xyzrender molecule.xyz -o molecule.png -t --bo
+test ! -e molecule_render_run01
+mkdir molecule_render_run01
+xyzrender molecule.xyz -o molecule_render_run01/molecule.png -t --bo
 ```
 
 Commands, input assumptions, and scientific caveats are collected in [`USAGE.md`](USAGE.md) and in each skill's own documentation.

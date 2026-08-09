@@ -5,6 +5,13 @@ Demonstrates a water-molecule DFT calculation, excited-state analysis, and
 selected molecular properties.
 """
 
+if __name__ == "__main__":
+    raise SystemExit(
+        "QUARANTINED: dft_calculation.py is a historical prototype and direct "
+        "execution is disabled. Use run_safe_dft_tda.py for the supported "
+        "closed-shell RKS/TDA workflow."
+    )
+
 from pyscf import gto, dft, tdscf, lib
 import numpy as np
 
@@ -195,15 +202,3 @@ def water_dft():
     print()
 
     return mf, td
-
-if __name__ == '__main__':
-    # Set the output level.
-    lib.logger.TIMER_LEVEL = 3
-    lib.logger.INFO = True
-
-    # Run the calculation.
-    mf, td = water_dft()
-
-    print("="*60)
-    print("Calculation complete!")
-    print("="*60)

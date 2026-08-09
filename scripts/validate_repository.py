@@ -20,10 +20,33 @@ ALLOWED_FRONTMATTER_FIELDS = {
     "allowed-tools",
 }
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-CJK_PATTERN = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+CJK_PATTERN = re.compile(
+    r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]"
+)
 MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)")
 PYTHON_FENCE_PATTERN = re.compile(r"```python[ \t]*\n(.*?)```", re.DOTALL)
+FENCED_CODE_PATTERN = re.compile(r"```.*?```", re.DOTALL)
+INLINE_CODE_PATTERN = re.compile(r"`[^`\n]*`")
 MAX_SKILL_LINES = 500
+PUBLIC_TEXT_SUFFIXES = {
+    ".bash",
+    ".com",
+    ".csv",
+    ".gjf",
+    ".inp",
+    ".json",
+    ".log",
+    ".sdf",
+    ".sh",
+    ".svg",
+    ".toml",
+    ".tsv",
+    ".txt",
+    ".xyz",
+    ".yaml",
+    ".yml",
+    ".zsh",
+}
 
 
 def relative(path: Path, root: Path) -> str:
@@ -106,7 +129,8 @@ def check_markdown(path: Path, root: Path) -> list[str]:
                 f"{label}:{error_line}: invalid Python code block: {exc.msg}"
             )
 
-    for match in MARKDOWN_LINK_PATTERN.finditer(text):
+    prose = INLINE_CODE_PATTERN.sub("", FENCED_CODE_PATTERN.sub("", text))
+    for match in MARKDOWN_LINK_PATTERN.finditer(prose):
         raw_target = match.group(1)
         if raw_target.startswith(("http://", "https://", "mailto:", "#")):
             continue
@@ -123,8 +147,11 @@ def check_markdown(path: Path, root: Path) -> list[str]:
 def check_reference_discovery(skill_file: Path, root: Path) -> list[str]:
     """Require supplemental Markdown to be directly discoverable from SKILL.md."""
     skill_text = skill_file.read_text(encoding="utf-8")
+    skill_prose = INLINE_CODE_PATTERN.sub(
+        "", FENCED_CODE_PATTERN.sub("", skill_text)
+    )
     linked_paths: set[Path] = set()
-    for match in MARKDOWN_LINK_PATTERN.finditer(skill_text):
+    for match in MARKDOWN_LINK_PATTERN.finditer(skill_prose):
         raw_target = match.group(1)
         if raw_target.startswith(("http://", "https://", "mailto:", "#")):
             continue
@@ -191,6 +218,27 @@ def check_python_source(root: Path) -> list[str]:
     return errors
 
 
+def check_public_text(root: Path) -> list[str]:
+    """Reject CJK prose in public text formats not handled elsewhere."""
+    errors: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if (
+            not path.is_file()
+            or ".git" in path.parts
+            or path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES
+        ):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        if CJK_PATTERN.search(text):
+            errors.append(
+                f"{relative(path, root)}: contains CJK text; public text must be English"
+            )
+    return errors
+
+
 def validate_repository(root: Path) -> list[str]:
     root = root.resolve()
     errors: list[str] = []
@@ -210,6 +258,7 @@ def validate_repository(root: Path) -> list[str]:
 
     errors.extend(check_license(root))
     errors.extend(check_python_source(root))
+    errors.extend(check_public_text(root))
     return errors
 
 

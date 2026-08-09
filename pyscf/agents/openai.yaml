@@ -1,0 +1,4 @@
+interface:
+  display_name: "PySCF Workflow"
+  short_description: "Build traceable, convergence-checked PySCF jobs"
+  default_prompt: "Use $pyscf to define and validate this calculation with explicit charge, spin, units, convergence checks, and version provenance."

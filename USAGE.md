@@ -35,31 +35,68 @@ Example sampling command:
 
 ```bash
 python3 molecular-sampler/molecular_sampler.py \
-  cluster.xyz --samples 20 --output-dir ./samples
+  cluster.xyz \
+  --xyz-units angstrom \
+  --layer all \
+  --expected-fragments 12 \
+  --samples 20 \
+  --output-dir ./samples_run01
 ```
 
-Confirm the input units, molecular segmentation, and requested sample counts before interpreting the generated structures.
+Replace `12` with an independently justified fragment count. Confirm the input
+units, inferred molecular segmentation, manifest hashes, and actual sample
+counts before interpreting the generated structures.
 
 ### xTB cluster construction and animation
 
 Build a cluster from an SDF input:
 
 ```bash
+set -e
+test ! -e cluster_run01
+mkdir cluster_run01
+mkdir cluster_run01/build cluster_run01/opt cluster_run01/md
 python3 xtb-cluster-md/scripts/build_cluster.py \
-  --sdf molecule.sdf -n 24 -o cluster.xyz
+  --sdf molecule.sdf \
+  --monomer-id "verified monomer identifier" \
+  --coordinate-provenance "saved 3D source and preparation record" \
+  --molecules 24 --box 40.0 \
+  --min-distance 2.0 --max-neighbor-distance 8.0 --seed 42 \
+  --out cluster_run01/build/cluster.xyz \
+  --manifest cluster_run01/build/cluster_build.json
 ```
 
-Run xTB only after reviewing the generated geometry and the xTB input:
+The box and both distance values are starting assumptions, not universal
+chemistry settings. Inspect the measured atom pairs, placement connectivity,
+and full geometry before optimization.
+
+After a separately accepted optimization, copy only its accepted geometry to
+`cluster_run01/md/input.xyz`. Then use the wrapper so the exact argv, exit code,
+log hash, unchanged source hashes, and private read-only input snapshots are
+retained:
 
 ```bash
-xtb cluster.xyz --gfnff --md --input md.inp
+python3 xtb-cluster-md/scripts/run_xtb_md.py \
+  --run-dir cluster_run01/md \
+  --input-file input.xyz --input-file md.inp \
+  --trajectory xtb.trj --success-marker xtbmdok \
+  --log md.log --receipt run_receipt.json -- \
+  xtb input.xyz --gfnff --md -I md.inp --chrg 0 --uhf 0
 ```
 
-Create an animation from a completed trajectory:
+Validate the schema-3 receipt, expected method, charge, unpaired-electron
+count, exact xTB version, log, marker, settings, input/snapshot identity, every
+trajectory frame, and run-specific geometry bounds before visualization; see
+[`xtb-cluster-md/SKILL.md`](xtb-cluster-md/SKILL.md) for the complete command.
+Then create an animation bound to the accepted report:
 
 ```bash
 python3 xtb-cluster-md/scripts/make_animation.py \
-  --traj xtb.trj -n 24 --nat-per-mol 12 -o animation.gif
+  --traj cluster_run01/md/xtb.trj \
+  --validation cluster_run01/md/validation.json \
+  -n 24 --nat-per-mol 12 \
+  -o cluster_run01/md/animation.gif \
+  --manifest cluster_run01/md/animation.json
 ```
 
 Use each script's `--help` output as the authority for its current option names.
@@ -69,20 +106,28 @@ Use each script's `--help` output as the authority for its current option names.
 After installing `xyzrender`:
 
 ```bash
-xyzrender molecule.xyz -o molecule.png -t --bo
+set -e
+test ! -e molecule_render_run01
+mkdir molecule_render_run01
+xyzrender molecule.xyz -o molecule_render_run01/molecule.png -t --bo
 ```
 
 Inspect inferred bonds and bond orders before using a rendering as structural evidence.
 
-### PySCF reference calculation
+### Supported PySCF runner
 
-The repository includes a benzene DFT/TDDFT reference script:
+Inspect the fail-closed closed-shell RKS/TDA runner without starting a
+calculation:
 
 ```bash
-python3 pyscf/references/benzene-dft-tddft.py
+python3 pyscf/scripts/run_safe_dft_tda.py --help
 ```
 
-This is a real calculation rather than an installation smoke test. Review its method, basis, memory use, output paths, and expected runtime before running it.
+Prepare the exact JSON contract described in [`pyscf/SKILL.md`](pyscf/SKILL.md),
+then run only into a fresh output directory. Files under `pyscf/tools/`, the old
+DFT script, and executable reference examples are quarantined historical
+prototypes and intentionally fail closed; they are not supported calculation
+entry points.
 
 ### Multiwfn
 

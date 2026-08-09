@@ -10,40 +10,20 @@ Notes:
 - Colors by molecule index.
 """
 
+from __future__ import annotations
+
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from PIL import Image
-
-
-def iter_xyz_frames(path: Path):
-    with path.open() as f:
-        while True:
-            line = f.readline()
-            if not line:
-                return
-            line = line.strip()
-            if not line:
-                continue
-            nat = int(line)
-            comment = f.readline().rstrip("\n")
-            atoms = []
-            coords = []
-            for _ in range(nat):
-                parts = f.readline().split()
-                atoms.append(parts[0])
-                coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
-            yield comment, np.array(atoms, dtype=object), np.array(coords, float)
+from trajectory_io import load_accepted_sampled_trajectory, save_verified_gif
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--traj", default="xtb.trj")
-    ap.add_argument("-n", type=int, default=12)
+    ap.add_argument("--traj", type=Path, default=Path("xtb.trj"))
+    ap.add_argument("--validation", type=Path, required=True)
+    ap.add_argument("-n", "--molecules", dest="molecules", type=int, required=True)
     ap.add_argument("--nat-per-mol", type=int, default=24)
     ap.add_argument("--stride", type=int, default=10)
     ap.add_argument("--max-frames", type=int, default=100)
@@ -51,28 +31,49 @@ def main():
     ap.add_argument("--size", type=int, default=800)
     ap.add_argument("--view", default="18,35", help="elev,azim")
     ap.add_argument("--zoom", type=float, default=1.0, help=">1 zooms in (reduces plot bounds)")
-    ap.add_argument("-o", "--out", default="anthracene_atoms.gif")
+    ap.add_argument("--title", default="Cluster molecular dynamics")
+    ap.add_argument("-o", "--out", type=Path, required=True)
+    ap.add_argument("--manifest", type=Path, required=True)
     args = ap.parse_args()
 
+    if args.molecules <= 0 or args.nat_per_mol <= 0 or args.stride <= 0 or args.max_frames <= 0:
+        raise ValueError("molecules, nat-per-mol, stride, and max-frames must be positive")
+    if args.zoom <= 0:
+        raise ValueError("zoom must be positive")
+    try:
+        import numpy as np
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from PIL import Image
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            "animation requires numpy, matplotlib, and Pillow"
+        ) from exc
     elev, azim = [float(x) for x in args.view.split(",")]
 
-    traj = Path(args.traj)
     series = []
     atom_types = None
     comments = []
-
-    for i, (comment, atoms, xyz) in enumerate(iter_xyz_frames(traj)):
-        if i % args.stride != 0:
-            continue
-        if xyz.shape[0] != args.n * args.nat_per_mol:
-            raise ValueError(f"Unexpected nat={xyz.shape[0]} expected {args.n*args.nat_per_mol}")
+    source_frames, provenance = load_accepted_sampled_trajectory(
+        args.traj,
+        args.validation,
+        args.molecules,
+        args.nat_per_mol,
+        args.stride,
+        args.max_frames,
+    )
+    for comment, labels, coordinates in source_frames:
+        atoms = np.array(labels, dtype=object)
+        xyz = np.array(coordinates, float)
         if atom_types is None:
-            atom_types = atoms.reshape(args.n, args.nat_per_mol)
-        series.append(xyz.reshape(args.n, args.nat_per_mol, 3))
+            atom_types = atoms.reshape(args.molecules, args.nat_per_mol)
+        series.append(xyz.reshape(args.molecules, args.nat_per_mol, 3))
         comments.append(comment)
-        if len(series) >= args.max_frames:
-            break
 
+    if not series or atom_types is None:
+        raise ValueError("trajectory yielded no selected frames")
     series = np.array(series)  # (T,n,nat,3)
 
     mins = series.min(axis=(0, 1, 2))
@@ -90,16 +91,13 @@ def main():
 
     cmap = plt.get_cmap("tab20")
     frames = []
-    tmp_dir = Path("_atom_frames")
-    tmp_dir.mkdir(exist_ok=True)
-
     for t in range(series.shape[0]):
         xyz_m = series[t]
 
         fig = plt.figure(figsize=(args.size / args.dpi, args.size / args.dpi), dpi=args.dpi)
         ax = fig.add_subplot(111, projection="3d")
 
-        for m in range(args.n):
+        for m in range(args.molecules):
             atoms_m = atom_types[m]
             pts = xyz_m[m]
             is_h = (atoms_m == 'H')
@@ -112,21 +110,41 @@ def main():
 
         ax.set_xlim(*lim(center[0])); ax.set_ylim(*lim(center[1])); ax.set_zlim(*lim(center[2]))
         ax.set_xlabel("x (Å)"); ax.set_ylabel("y (Å)"); ax.set_zlabel("z (Å)")
-        ax.set_title(f"Anthracene MD (xTB GFN-FF, 300K)  frame {t+1}/{series.shape[0]}")
+        ax.set_title(f"{args.title} — frame {t+1}/{series.shape[0]}")
         ax.view_init(elev=elev, azim=azim)
         ax.grid(False)
         ax.set_xticks([]); ax.set_yticks([]); ax.set_zticks([])
 
-        out_png = tmp_dir / f"atom_{t:04d}.png"
         fig.tight_layout()
-        fig.savefig(out_png)
+        buffer = BytesIO()
+        fig.savefig(buffer, format="png")
         plt.close(fig)
 
-        frames.append(Image.open(out_png).convert("P", palette=Image.Palette.ADAPTIVE))
+        buffer.seek(0)
+        with Image.open(buffer) as rendered:
+            frames.append(rendered.convert("P", palette=Image.Palette.ADAPTIVE).copy())
 
-    out = Path(args.out)
-    frames[0].save(out, save_all=True, append_images=frames[1:], duration=70, loop=0, optimize=False)
-    print(f"Wrote {out} ({len(frames)} frames)")
+    save_verified_gif(
+        frames,
+        args.out,
+        args.manifest,
+        70,
+        provenance,
+        {
+            "type": "atom_point_cloud",
+            "molecules": args.molecules,
+            "atoms_per_molecule": args.nat_per_mol,
+            "stride": args.stride,
+            "maximum_rendered_frames": args.max_frames,
+            "size_pixels": args.size,
+            "dpi": args.dpi,
+            "view": args.view,
+            "zoom": args.zoom,
+            "title": args.title,
+            "limitation": "points are colored by molecule block; no bonds are drawn",
+        },
+    )
+    print(f"Wrote {args.out} ({len(frames)} frames)")
 
 
 if __name__ == "__main__":

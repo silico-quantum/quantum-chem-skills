@@ -4,6 +4,10 @@ Benzene (C₆H₆) - Comprehensive RDKit Visualization
 A showcase of molecular analysis and visualization capabilities
 """
 
+from _legacy_guard import refuse_legacy_example
+
+refuse_legacy_example(__file__)
+
 from rdkit import Chem
 from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
 from rdkit.Chem.Draw import rdMolDraw2D

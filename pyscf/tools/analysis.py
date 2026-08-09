@@ -2,7 +2,7 @@
 """
 Wavefunction Analysis - Population analysis, orbital analysis, DOS
 
-Supports:
+Historical claims (unvalidated):
     - Mulliken charges
     - Löwdin charges
     - Natural Population Analysis (NPA)
@@ -11,11 +11,15 @@ Supports:
     - Dipole moment
     - Orbital composition
 
-Usage:
+Historical interface (disabled):
     python analysis.py <chkfile> <task> [params]
     python analysis.py hf.chk mulliken
     python analysis.py hf.chk dos --plot
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -290,7 +294,3 @@ def main():
     print('Analysis task: %s' % task)
     print('Input: %s' % input_file)
     print('\nRequires SCF/MF object. Use from Python directly.')
-
-
-if __name__ == '__main__':
-    main()

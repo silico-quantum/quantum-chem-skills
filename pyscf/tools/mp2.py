@@ -2,16 +2,20 @@
 """
 MP2 - Second-Order Møller-Plesset Perturbation Theory
 
-Supports:
+Historical claims (unvalidated):
     - RMP2 (restricted closed-shell)
     - UMP2 (unrestricted open-shell)
     - RI-MP2 (density fitting)
 
-Usage:
+Historical interface (disabled):
     python mp2.py <xyz_file> [basis] [method]
     python mp2.py water.csv cc-pvdz rmp2
     python mp2.py o2_triplet.csv sto-3g ump2
 """
+
+if __name__ == '__main__':
+    from _legacy_guard import refuse_direct_execution
+    refuse_direct_execution(__file__)
 
 import sys
 import numpy as np
@@ -96,7 +100,3 @@ def main():
         run_ump2(xyz_file, basis)
     else:
         run_rmp2(xyz_file, basis)
-
-
-if __name__ == '__main__':
-    main()

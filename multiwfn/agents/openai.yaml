@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multiwfn Wavefunction Analysis"
+  short_description: "Run provenance-aware Multiwfn wavefunction analyses"
+  default_prompt: "Use $multiwfn to plan and validate a provenance-complete wavefunction analysis."
