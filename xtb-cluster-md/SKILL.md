@@ -1,6 +1,8 @@
 ---
 name: xtb-cluster-md
-description: Run xTB (GFN-FF / GFN2-xTB) molecular dynamics for organic molecular clusters (e.g., anthracene/benzene), starting from random packed geometries; then generate animated GIFs (full trajectory, COM view, local clustered subset, bond-emphasized). Use when asked to simulate many-molecule stacking/aggregation dynamics, low-temperature “freezing/condensation” behavior, or to visualize xTB MD trajectories as animations.
+description: Use when simulating molecular-cluster stacking or aggregation with xTB molecular dynamics and visualizing trajectories as full-system, center-of-mass, local-cluster, or bond-emphasized animations.
+license: MIT
+compatibility: Requires xTB and Python; animation scripts require NumPy, Matplotlib, and Pillow, and structure download requires network access.
 ---
 
 # xTB cluster MD + visualization
@@ -86,3 +88,6 @@ Local-cluster selection options:
 - `scripts/make_atom_animation.py`: full atom-level GIF (colored by molecule index).
 - `scripts/make_animation.py`: COM-only 3D motion GIF.
 - `scripts/make_local_cluster_animation.py`: pick a “final cluster” from last frame and render only that subset; optional bond drawing.
+
+See the [benzene cluster example](references/benzene-cluster-example.md) for a
+worked workflow.

@@ -1,22 +1,30 @@
-# MOMAP Skill (v2 — 2024A Verified)
+---
+name: momap
+description: Use when preparing, running, or interpreting MOMAP workflows for molecular photophysics, nonradiative rates, spectra, spin-orbit coupling, or charge transport.
+license: MIT
+compatibility: Requires a licensed MOMAP installation; selected workflows also require Gaussian outputs, MPI, PySOC, or a Slurm environment.
+---
 
-**MOMAP (Molecular Materials Property Prediction Package)** — 分子材料光物理/传输性质预测
+# MOMAP Workflow Skill
+
+**MOMAP (Molecular Materials Property Prediction Package)** predicts molecular-material photophysical and transport properties.
 Version 2024A (2.3.7), Hongzhiwei Technology / Z.G. Shuai Group
 
-## Server Setup
+## Environment Setup
 
 ```bash
-# On marcus / marcus2
-source /opt/MOMAP-2024A/env.sh
-# or
-module load momap/2024A-openmpi
+# Source the licensed installation's environment script.
+source "${MOMAP_ENV:-/opt/MOMAP-2024A/env.sh}"
+
+# Alternatively, use the site-specific environment module when available.
+module load "${MOMAP_MODULE:-momap/2024A-openmpi}"
 ```
 
 **Key env vars set by env.sh:**
-- `MOMAP_ROOT=/opt/MOMAP-2024A`
-- `MOMAP_BIN=/opt/MOMAP-2024A/bin`
-- `MOMAP_MPI_BIN=/opt/MOMAP-2024A/bin/openmpi/bin`
-- `MOMAP_LICENSE=/opt/MOMAP-2024A/license/hzwtech.lic`
+- `MOMAP_ROOT` points to the installation root.
+- `MOMAP_BIN=$MOMAP_ROOT/bin`
+- `MOMAP_MPI_BIN=$MOMAP_ROOT/bin/openmpi/bin`
+- `MOMAP_LICENSE` points to the licensed installation's license file.
 - `LD_LIBRARY_PATH` includes `.../openmpi/lib` and `.../lib`
 
 **MPI compatibility note:** MOMAP ships OpenMPI 1.x but the system OpenMPI is 3.1.4.
@@ -238,10 +246,13 @@ Carrier mobility for OLED charge balance:
 # From S0 log:
 grep "SCF Done" s0.log | tail -1    →  E_SCF_S0
 
-# From S1 log (last SCF Done = S1 min):
-grep "SCF Done" s1.log | tail -1    →  E_SCF_S1
+# From S1 log at the S1 minimum:
+grep "SCF Done" s1.log | tail -1    →  E_SCF_reference
+grep "Excited State   1:" s1.log | tail -1  →  E_exc,S1 in eV
 
-# Ead = E_SCF_S1 - E_SCF_S0  (in Hartree)
+# E_S1,total = E_SCF_reference + E_exc,S1 / 27.2114
+# Ead = E_S1,total - E_SCF_S0  (in Hartree)
+# Do not substitute E_SCF_reference when the state-1 excitation is missing.
 ```
 
 ### EDMA (absorption transition dipole moment)
@@ -250,14 +261,15 @@ From S0 geometry TDDFT output:
 grep -A5 "transition electric dipole" s1.log | head -10
 #  state    X        Y        Z       Dip.S.    Osc.
 #    1   0.2169   0.2932   0.0000   0.1330    0.0079
-# Dip.S. (au) → multiply by 2.5417 to convert to debye
+# sqrt(X² + Y² + Z²) × 2.541746 → debye
+# Equivalently, use sqrt(Dip.S.) × 2.541746 if XYZ is unavailable.
 ```
 
 ### EDME (emission transition dipole moment)
 From S1 minimum geometry TDDFT (last Excited State block):
 ```
 # Same as EDMA but from the last TDDFT block in s1.log
-# Use Dip.S. of state 1 at S1-optimized geometry
+# Use the vector norm for state 1 at the S1-optimized geometry
 ```
 
 ## Example: Azulene (bundled test)
@@ -331,9 +343,13 @@ mpirun -np 4 momap -i momap.inp
 
 ### Reference files
 All test examples with pre-computed Gaussian logs:
-- `/opt/MOMAP-2024A/tests/azulene/gaussian/ref/` — azulene S0/S1
-- `/opt/MOMAP-2024A/tests/porphine/gaussian_g16/` — porphine
-- `/opt/MOMAP-2024A/tests/Irppy3/` — Ir(ppy)₃
+- `$MOMAP_ROOT/tests/azulene/gaussian/ref/` — azulene S0/S1
+- `$MOMAP_ROOT/tests/porphine/gaussian_g16/` — porphine
+- `$MOMAP_ROOT/tests/Irppy3/` — Ir(ppy)₃
+
+Repository guidance:
+- [Worked examples](EXAMPLES.md)
+- [Command quick reference](QUICKREF.md)
 
 ## Citations
 
@@ -346,7 +362,7 @@ Official: http://www.momap.cn
 
 ## Toolkit (momap/tools/)
 
-Four Python CLI tools for automated MOMAP workflows:
+Five Python CLI tools for automated MOMAP workflows:
 
 ### momap-extract — Gaussian → MOMAP params
 ```bash
@@ -363,10 +379,23 @@ python3 tools/runner.py momap.inp [--slurm] [--nprocs 4]
 
 ### momap-tadf — Full TADF pipeline
 ```bash
-python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log
-# Runs: EVC(S1→S0) → spec_tvcf → ISC(S1→T1) → summary
-# Output: spectrum, peak λ, blue window check, ΔE_ST
+python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log \
+  --json-output result.json
+# Runs: EVC(S1→S0) → spec_tvcf → summary
+# Output: spectrum, peak λ, blue window check, ΔE_ST, ISC=not_computed
+
+# Add ISC only when a computed or measured SOC value is available:
+python3 tools/tadf.py mol_id --s0 s0.log --s1 s1.log --t1 t1.log \
+  --hso-cm1 12.5 --json-output result.json
 ```
+
+The TADF tool stages each Gaussian log with its matching `.fchk` in the MOMAP
+work directory. It computes the S1 total energy as the last SCF reference
+energy plus the last state-1 excitation energy and fails if either quantity is
+missing. It uses state 1 from the first and last TD transition-dipole tables
+for absorption and emission, respectively, and converts the XYZ vector norm
+from atomic units to Debye. ISC is not run without an explicit `--hso-cm1`;
+no placeholder spin-orbit coupling is assumed.
 
 ### momap-plot — Spectrum visualization
 ```bash

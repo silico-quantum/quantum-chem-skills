@@ -1,83 +1,93 @@
-# Gaussian 关键词完整参考
+# Gaussian Keyword Reference
 
-## 计算类型 (Job Type)
+This page is a compact orientation guide, not a substitute for the
+[official Gaussian keyword documentation](https://gaussian.com/keywords/).
+Confirm version-specific syntax before production calculations.
 
-| 关键词 | 说明 | 常用选项 |
-|--------|------|----------|
-| SP | 单点能量 | 默认 |
-| Opt | 几何优化 | Opt=CalcFC, Opt=TS |
-| Freq | 频率分析 | Freq=Raman |
-| Scan | 势能面扫描 | Scan=Opt |
-| IRC | 内禀反应坐标 | IRC=CalcFC |
-| Polar | 极化率 | Polar=EnOnly |
+## Job Types
 
-## DFT 泛函
+| Keyword | Purpose | Common options |
+|---------|---------|----------------|
+| SP | Single-point energy | Default |
+| Opt | Geometry optimization | `Opt=CalcFC`, `Opt=TS` |
+| Freq | Frequency analysis | `Freq=Raman` |
+| Scan | Potential-energy-surface scan | `Scan=Opt` |
+| IRC | Intrinsic reaction coordinate | `IRC=CalcFC` |
+| Polar | Polarizability | `Polar=EnOnly` |
 
-| 泛函 | 类型 | 特点 |
-|------|------|------|
-| B3LYP | 杂化 | 最常用 (20% HF) |
-| PBE0 | 杂化 | 25% HF |
-| M06-2X | Meta-GGA | 54% HF |
-| CAM-B3LYP | 范围分离 | 长程修正 |
-| ωB97X-D | 范围分离+色散 | 长程+色散 |
+## DFT Functionals
 
-## 基组
+| Functional | Type | Characteristic |
+|------------|------|----------------|
+| B3LYP | Hybrid | 20% Hartree–Fock exchange |
+| PBE0 | Hybrid | 25% Hartree–Fock exchange |
+| M06-2X | Meta-hybrid GGA | 54% Hartree–Fock exchange |
+| CAM-B3LYP | Range-separated hybrid | Long-range correction |
+| ωB97X-D | Range-separated hybrid with dispersion | Long-range correction and dispersion |
 
-### Pople 系列
-- 6-31G: 双ζ
-- 6-31G*: 双ζ+d极化
-- 6-31G**: 双ζ+dp极化
-- 6-31+G*: 双ζ+扩散+d
-- 6-311G**: 三ζ+极化
+Method suitability is system- and property-dependent; benchmark against an
+appropriate reference rather than choosing a functional from this table alone.
 
-### 相关一致
-- cc-pVDZ, cc-pVTZ, cc-pVQZ
-- aug-cc-pVTZ (加扩散)
+## Basis Sets
 
-### def2 系列
-- def2-SVP, def2-TZVP, def2-QZVP
+### Pople family
 
-## TDDFT 激发态
+- `6-31G`: split-valence double-zeta
+- `6-31G*`: double-zeta with polarization on non-hydrogen atoms
+- `6-31G**`: double-zeta with polarization on all atoms
+- `6-31+G*`: double-zeta with diffuse functions and polarization
+- `6-311G**`: split-valence triple-zeta with polarization
+
+### Correlation-consistent family
+
+- `cc-pVDZ`, `cc-pVTZ`, `cc-pVQZ`
+- `aug-cc-pVTZ` with diffuse augmentation
+
+### def2 family
+
+- `def2-SVP`, `def2-TZVP`, `def2-QZVP`
+
+## TDDFT Excited States
 
 ```
 TD(NStates=10,Root=1,Singlets)
 ```
 
-- NStates: 激发态数量
-- Root: 优化哪个态
-- Singlets/Triplets: 单/三重态
+- `NStates`: number of excited states
+- `Root`: state selected for state-specific operations such as optimization
+- `Singlets` / `Triplets`: requested spin manifold
 
-## 溶剂效应 (SCRF)
+## Solvent Effects (SCRF)
 
 ```
 SCRF=(SMD,Solvent=Water)
 ```
 
-常用溶剂: Water, Ethanol, Acetonitrile, DMF, DMSO, Toluene
+Common solvent names include `Water`, `Ethanol`, `Acetonitrile`, `DMF`,
+`DMSO`, and `Toluene`.
 
-## Opt 选项
+## Optimization Options
 
-- Opt=CalcFC: 初始计算力常数
-- Opt=TS: 过渡态
-- Opt=Tight: 紧收敛
-- Opt=MaxStep=N: 最大步长
+- `Opt=CalcFC`: calculate force constants at the initial geometry
+- `Opt=TS`: search for a transition state
+- `Opt=Tight`: use tighter convergence criteria
+- `Opt=MaxStep=N`: set the maximum optimization step
 
-## SCF 收敛
+## SCF Convergence
 
-- SCF=QC: 二次收敛（最稳定）
-- SCF=XQC: 先快后慢
-- SCF=Tight: 紧收敛
+- `SCF=QC`: use quadratic convergence
+- `SCF=XQC`: start with the default procedure and fall back to quadratic convergence
+- `SCF=Tight`: use tighter SCF convergence criteria
 
-## 布居分析 (Pop)
+## Population Analysis (Pop)
 
-- Pop=Full: 完整分析
-- Pop=NBO: Natural Bond Orbital
-- Pop=NPA: Natural Population
-- Pop=MK: Merz-Kollman 电荷
+- `Pop=Full`: request expanded orbital information
+- `Pop=NBO`: request Natural Bond Orbital analysis when the required support is available
+- `Pop=NPA`: request Natural Population Analysis when supported
+- `Pop=MK`: fit Merz–Kollman electrostatic-potential charges
 
-## Link 0 命令
+## Link 0 Commands
 
-- %chk=file.chk: 检查点
-- %mem=60GB: 内存
-- %nproc=64: 核心数
-
+- `%chk=file.chk`: checkpoint file
+- `%mem=60GB`: memory allocation
+- `%nprocshared=64`: shared-memory worker count

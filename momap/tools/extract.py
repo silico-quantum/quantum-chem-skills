@@ -7,9 +7,18 @@ import sys
 import re
 import os
 import argparse
+import math
 from pathlib import Path
 
 AU2DEBYE = 2.541746
+HA2EV = 27.2114
+
+_FLOAT_PATTERN = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[EeDd][-+]?\d+)?"
+
+
+def _as_float(value):
+    """Parse Gaussian-style floating-point text, including Fortran D exponents."""
+    return float(value.replace('D', 'E').replace('d', 'e'))
 
 def extract_scf_energy(logpath):
     """Extract last SCF Done energy from Gaussian log."""
@@ -29,49 +38,115 @@ def extract_last_excitation_ev(logpath):
     last_exc_ev = None
     with open(logpath) as f:
         for line in f:
-            # Match: " Excited State   1:      Singlet-A'     1.6143 eV  768.02 nm  f=0.0026"
-            if 'Excited State' in line and ':      ' in line:
-                parts = line.split()
-                try:
-                    state_idx = parts.index('State') if 'State' in parts else -1
-                    if state_idx >= 0:
-                        state_num = int(parts[state_idx + 1].rstrip(':'))
-                        if state_num == 1:
-                            # Find eV value
-                            for j, p in enumerate(parts):
-                                if p == 'eV':
-                                    last_exc_ev = float(parts[j-1])
-                                    break
-                except (ValueError, IndexError):
-                    pass
+            # Example: "Excited State   1: Singlet-A  1.6143 eV ..."
+            match = re.search(
+                rf'Excited\s+State\s+(\d+)\s*:.*?({_FLOAT_PATTERN})\s+eV\b',
+                line,
+                flags=re.IGNORECASE,
+            )
+            if match and int(match.group(1)) == 1:
+                last_exc_ev = _as_float(match.group(2))
     return last_exc_ev
+
+
+def extract_s1_total_energy(logpath):
+    """Return the final S1 total energy in Hartree.
+
+    Gaussian TDDFT logs report the reference-state SCF energy and the
+    excitation energy separately. The S1 total energy is therefore the last
+    SCF energy plus the last state-1 excitation energy. Missing excitation
+    data is an error; silently substituting the SCF energy would label an S0
+    reference energy as S1.
+    """
+    scf_energy = extract_scf_energy(logpath)
+    excitation_ev = extract_last_excitation_ev(logpath)
+    if excitation_ev is None:
+        raise ValueError(f"No S1 state 1 excitation energy found in {logpath}")
+    return scf_energy + excitation_ev / HA2EV
+
+
+def extract_transition_dipole_blocks(logpath):
+    """Extract separate Gaussian transition-dipole tables in file order."""
+    blocks = []
+    current = None
+    row_pattern = re.compile(
+        rf'^\s*(\d+)\s+({_FLOAT_PATTERN})\s+({_FLOAT_PATTERN})\s+'
+        rf'({_FLOAT_PATTERN})\s+({_FLOAT_PATTERN})\s+({_FLOAT_PATTERN})(?:\s|$)'
+    )
+
+    with open(logpath) as f:
+        for line in f:
+            if 'Ground to excited state transition electric dipole moments' in line:
+                if current:
+                    blocks.append(current)
+                current = []
+                continue
+
+            if current is None:
+                continue
+
+            match = row_pattern.match(line)
+            if match:
+                current.append({
+                    'state': int(match.group(1)),
+                    'X': _as_float(match.group(2)),
+                    'Y': _as_float(match.group(3)),
+                    'Z': _as_float(match.group(4)),
+                    'DipS': _as_float(match.group(5)),
+                    'Osc': _as_float(match.group(6)),
+                })
+            elif current and (
+                not line.strip()
+                or 'Ground to excited state transition velocity' in line
+            ):
+                blocks.append(current)
+                current = None
+
+    if current:
+        blocks.append(current)
+    return blocks
 
 def extract_transition_dipoles(logpath):
     """Extract transition electric dipole moments for all excited states.
     Returns list of dicts with state, X, Y, Z, Dip.S., Osc."""
-    results = []
-    with open(logpath) as f:
-        lines = f.readlines()
-    
-    in_block = False
-    for line in lines:
-        if 'Ground to excited state transition electric dipole moments' in line:
-            in_block = True
-            continue
-        if in_block:
-            m = re.match(r'\s+(\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)', line)
-            if m:
-                results.append({
-                    'state': int(m.group(1)),
-                    'X': float(m.group(2)),
-                    'Y': float(m.group(3)),
-                    'Z': float(m.group(4)),
-                    'DipS': float(m.group(5)),
-                    'Osc': float(m.group(6)),
-                })
-            elif line.strip() == '' or 'Ground to excited state transition velocity' in line:
-                in_block = False
-    return results
+    return [
+        transition
+        for block in extract_transition_dipole_blocks(logpath)
+        for transition in block
+    ]
+
+
+def _with_transition_magnitude(transition):
+    """Add transition-dipole magnitudes in atomic units and Debye."""
+    coordinates = [transition.get(axis) for axis in ('X', 'Y', 'Z')]
+    if all(value is not None for value in coordinates):
+        magnitude_au = math.sqrt(sum(value * value for value in coordinates))
+    elif transition.get('DipS') is not None and transition['DipS'] >= 0:
+        magnitude_au = math.sqrt(transition['DipS'])
+    else:
+        raise ValueError("Transition dipole has neither XYZ components nor valid DipS")
+
+    enriched = dict(transition)
+    enriched['magnitude_au'] = magnitude_au
+    enriched['magnitude_debye'] = magnitude_au * AU2DEBYE
+    return enriched
+
+
+def extract_state1_transition_endpoints(logpath):
+    """Return state-1 transitions from the first and last TD dipole blocks."""
+    blocks = extract_transition_dipole_blocks(logpath)
+    if not blocks:
+        raise ValueError(f"No TD transition-dipole blocks found in {logpath}")
+
+    endpoints = []
+    for label, block in (('first', blocks[0]), ('last', blocks[-1])):
+        transition = next((item for item in block if item['state'] == 1), None)
+        if transition is None:
+            raise ValueError(
+                f"No state 1 transition in {label} TD dipole block of {logpath}"
+            )
+        endpoints.append(_with_transition_magnitude(transition))
+    return tuple(endpoints)
 
 def extract_dipole_moment(logpath):
     """Extract last dipole moment from Gaussian log."""
@@ -137,30 +212,21 @@ def main():
 
     # Extract SCF energies + adiabatic excitation
     E_S0 = extract_scf_energy(args.s0)
-    E_S1_scf = extract_scf_energy(args.s1)  # S0 part at S1 geometry
+    E_S1_scf = extract_scf_energy(args.s1)  # S0 reference at S1 geometry
     exc_ev = extract_last_excitation_ev(args.s1)
-    
-    if exc_ev:
-        # Ead = E(S1 at S1_min) - E(S0 at S0_min)
-        #      = (E_SCF_S1 + E_exc) - E_SCF_S0
-        E_S1_total = E_S1_scf + exc_ev / 27.2114
-        Ead = E_S1_total - E_S0
-    else:
-        Ead = E_S1_scf - E_S0  # fallback
+    E_S1_total = extract_s1_total_energy(args.s1)
+    Ead = E_S1_total - E_S0
 
     # Extract transition dipoles from S1 log
     # EDMA: from first TDM block (S0 geometry → vertical absorption)
     # EDME: from last TDM block (S1 minimum → emission)
-    tdms = extract_transition_dipoles(args.s1)
-    
-    EDMA_au = tdms[0]['DipS'] if tdms else 0.0
-    EDME_au = tdms[-1]['DipS'] if tdms else 0.0
-    EDMA = EDMA_au * AU2DEBYE
-    EDME = EDME_au * AU2DEBYE
+    absorption, emission = extract_state1_transition_endpoints(args.s1)
+    EDMA = absorption['magnitude_debye']
+    EDME = emission['magnitude_debye']
 
     # Extract oscillator strengths
-    f_abs = tdms[0]['Osc'] if tdms else 0.0
-    f_emi = tdms[-1]['Osc'] if tdms else 0.0
+    f_abs = absorption['Osc']
+    f_emi = emission['Osc']
 
     # Count normal terminations
     nts_s0 = count_normal_terminations(args.s0)
@@ -174,7 +240,7 @@ def main():
         'f_abs': f_abs,
         'f_emi': f_emi,
         'E_S0': E_S0,
-        'E_S1': E_S1_total if exc_ev else E_S1_scf,
+        'E_S1': E_S1_total,
         'E_S1_scf': E_S1_scf,
         'E_exc_ev': exc_ev,
         'temperature': args.temperature,

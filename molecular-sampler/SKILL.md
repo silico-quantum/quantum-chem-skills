@@ -1,126 +1,119 @@
 ---
 name: molecular-sampler
-version: 1.0.0
-description: Sample monomers and multi-molecule complexes from Gaussian ONIOM or XYZ files. Extract all monomers, then sample dimers/trimers/tetramers/pentamers using distance-sorted nearest neighbors.
-homepage: https://github.com/STOKES-DOT/molecular-sampler
-metadata:
-  category: chemistry
-  emoji: 🧪
-  tags:
-    - chemistry
-    - sampling
-    - molecules
-    - gaussian
-    - oniom
+description: Use when extracting molecular fragments from Gaussian GJF or XYZ geometries and generating deterministic nearest-neighbor monomer, dimer, trimer, tetramer, and pentamer samples.
+license: MIT
+compatibility: Requires Python 3.7 or later, NumPy, and local access to the input geometry file.
 ---
 
 # Molecular Sampler
 
-从 Gaussian ONIOM 或 XYZ 文件中采样分子结构。
+Extract connected molecular fragments from a Gaussian GJF or XYZ geometry, write every detected monomer, and construct nearby multi-molecule complexes.
 
-## 功能
+## Workflow
 
-1. **单体提取**：识别并保存所有独立分子
-2. **多聚体采样**：基于距离排序，选择最近的相邻分子
-   - 二聚体 (dimers): 2 个分子
-   - 三聚体 (trimers): 3 个分子
-   - 四聚体 (tetramers): 4 个分子
-   - 五聚体 (pentamers): 5 个分子
+1. Confirm that the input is a `.gjf` or `.xyz` file.
+2. For an ONIOM GJF file, select the `H`, `L`, or `all` layer scope. XYZ atoms are assigned to the `L` layer by default.
+3. Choose an output directory and the maximum number of starting molecules to sample for each complex size.
+4. Run the sampler.
+5. Inspect `sampling_summary.txt` and spot-check the generated XYZ files before using them in downstream calculations.
 
-## 使用方法
+## Basic Usage
 
-### 基本用法
+Run the script from this skill directory:
 
 ```bash
 python3 molecular_sampler.py <input_file> [options]
 ```
 
-### 参数
+### Arguments
 
-- `input_file`: Gaussian GJF 或 XYZ 文件路径
-- `--output-dir`: 输出目录 (默认: `./molecular_samples`)
-- `--samples`: 每种多聚体的采样数量 (默认: 20)
-- `--layer`: 选择层 ('H', 'L', 或 'all') (默认: 'L')
+- `input_file`: path to a Gaussian GJF or standard XYZ file.
+- `--output-dir`: output directory; default: `./molecular_samples`.
+- `--samples`: maximum number of starting molecules used for each multi-molecule sample type; default: `20`.
+- `--layer`: ONIOM layer selection: `H`, `L`, or `all`; default: `L`.
 
-### 示例
+### Examples
 
 ```bash
-# 采样 L 层分子
+# Sample the low-level layer from an ONIOM input.
 python3 molecular_sampler.py guest_monomer.gjf --layer L --samples 20
 
-# 采样所有层分子
+# Process all atoms in an XYZ file and choose an output directory.
 python3 molecular_sampler.py structure.xyz --layer all --output-dir ./my_samples
 ```
 
-## 输出结构
+## Output Layout
 
-```
+```text
 molecular_samples/
-├── monomers/           # 所有单体分子
+├── monomers/           # Every detected monomer
 │   ├── monomer_01.xyz
 │   ├── monomer_02.xyz
 │   └── ...
-├── dimers/             # 二聚体 (20个样本)
-├── trimers/            # 三聚体 (20个样本)
-├── tetramers/          # 四聚体 (20个样本)
-├── pentamers/          # 五聚体 (20个样本)
+├── dimers/             # Up to --samples structures
+├── trimers/            # Up to --samples structures
+├── tetramers/          # Up to --samples structures
+├── pentamers/          # Up to --samples structures
 └── sampling_summary.txt
 ```
 
-## 采样策略
+Each generated structure is a standard XYZ file. Its comment line records the sample index, molecule count, and atom count.
 
-### 分子识别
-- 使用 Union-Find 算法识别连通分子
-- 基于共价半径检测化学键
-- 分子间距离 > 3Å 视为独立分子
+## Implemented Sampling Method
 
-### 多聚体采样
-1. 计算所有分子中心点之间的距离
-2. 对每个分子，按距离排序邻居
-3. 选择最近的 N-1 个邻居形成 N 聚体
-4. 从前 20 个分子开始采样，确保多样性
+### Molecule Identification
 
-## XYZ 文件格式
+- Filter atoms by the selected ONIOM layer.
+- Infer bonds when the interatomic distance is less than `1.3 × (r1 + r2)`, where `r1` and `r2` are tabulated covalent radii.
+- Use a Union-Find connected-component algorithm to identify fragments.
+- Discard connected components containing fewer than five atoms.
+- Represent each retained molecule by the arithmetic mean of its atomic coordinates.
 
-标准 XYZ 格式：
-```
+### Multi-Molecule Sampling
+
+1. Calculate all pairwise distances between molecular coordinate centroids.
+2. Sort the neighbor list of each molecule by distance.
+3. For an N-molecule complex, combine each starting molecule with its nearest `N - 1` neighbors.
+4. Iterate over at most the first `--samples` molecules in deterministic coordinate-sorted order.
+
+This is deterministic nearest-neighbor sampling, not random or diversity-optimized sampling. The requested oligomer size also requires enough detected molecules; inspect the output rather than assuming every generated sample contains the target count.
+
+## Input Format
+
+A standard XYZ file has this form:
+
+```text
 <atom_count>
 <comment>
 <element> <x> <y> <z>
 ...
 ```
 
-## 依赖
+Gaussian inputs must contain a geometry block that the bundled parser recognizes. ONIOM inputs must include valid `H` or `L` layer markers.
 
-- Python 3.7+
+## Dependencies
+
+- Python 3.7 or later
 - NumPy
-- 标准库: `re`, `collections`, `os`, `argparse`
+- Python standard-library modules: `argparse`, `collections`, `os`, `re`, and `sys`
 
-## 工作流程
+## Appropriate Uses
 
-1. **解析文件**：读取 GJF/XYZ 文件，提取原子坐标
-2. **分子识别**：使用化学键检测识别独立分子
-3. **距离计算**：计算所有分子中心点之间的欧氏距离
-4. **邻居排序**：对每个分子按距离排序邻居列表
-5. **采样**：选择最近的邻居形成多聚体
-6. **输出**：生成 XYZ 文件和摘要
+- Extracting molecular clusters from crystal or aggregate geometries
+- Preparing nearby fragment complexes for quantum-chemistry calculations
+- Separating sufficiently disconnected molecular fragments in ONIOM or XYZ geometries
 
-## 适用场景
+## Validation Notes
 
-- 蛋白质-配体复合物采样
-- 晶体结构中的分子簇提取
-- 分子动力学轨迹采样
-- 量子化学计算体系准备
+- Bond perception depends on the built-in covalent-radius table and a fixed `1.3` tolerance factor.
+- Components with fewer than five atoms are intentionally omitted, so the tool is unsuitable for retaining small molecules or ions without code changes.
+- The implementation evaluates all atom pairs during bond detection; large systems may require substantial runtime.
+- Review charge, multiplicity, chemical identity, and periodic-boundary effects independently before downstream calculations.
 
-## 注意事项
+## Extended Example
 
-- 确保输入文件中的分子间距合理 (>3Å)
-- 大体系 (>10000 原子) 可能需要较长处理时间
-- ONIOM 文件需包含正确的层标记 (H/L)
+See [Benzene cluster sampling](references/benzene-example.md) for a complete input-generation and sampling walkthrough.
 
-## 版本历史
+## Version History
 
-- **v1.0.0** (2026-03-03): 初始版本
-  - 支持单体的完整提取
-  - 距离排序的多聚体采样
-  - 标准 XYZ 输出格式
+- **v1.0.0** (2026-03-03): initial release with monomer extraction, distance-sorted oligomer sampling, and standard XYZ output.

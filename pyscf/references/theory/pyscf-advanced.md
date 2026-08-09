@@ -1,35 +1,37 @@
-# PySCF高级功能参考
+# PySCF Advanced Features Reference
 
-## 自定义交换相关泛函
+## Custom Exchange-Correlation Functionals
 
-### 1. 泛函基本结构
+### 1. Basic Functional Structure
 
-#### 泛函接口
+#### Functional Interface
 ```python
 from pyscf.dft import libxc, numint
 
-# 泛函定义函数
+# Functional definition
 def my_xc(rho, spin=0, deriv=1, **kwargs):
     """
-    自定义交换相关泛函
+    Custom exchange-correlation functional.
 
-    参数:
-        rho: (N, 4) 或 (N, 2) 数组
+    Parameters:
+        rho: (N, 4) or (N, 2) array
               spin=0: [rho, grad_x, grad_y, grad_z]
               spin=1: [rho_a, rho_b, grad_ax, grad_ay, grad_az,
                        grad_bx, grad_by, grad_bz]
-        spin: 自旋极化 (0: 限制性, 1: 非限制性)
-        deriv: 导数阶数 (1: 能量和势, 2: 势的导数等)
+        spin: Spin polarization (0: restricted, 1: unrestricted)
+        deriv: Derivative order (1: energy and potential;
+               2: derivatives of the potential, and so on)
 
-    返回:
+    Returns:
         deriv=1: (ex+vc, vrho, vgamma)
-            ex+vc: (N,) 交换相关能密度
-            vrho: (N, 2) 密度势 (dE/drho_a, dE/drho_b)
-            vgamma: (N, 3) 梯度势 (dE/dgamma_aa, dE/dgamma_ab, dE/dgamma_bb)
+            ex+vc: (N,) exchange-correlation energy density
+            vrho: (N, 2) density potential (dE/drho_a, dE/drho_b)
+            vgamma: (N, 3) gradient potential
+                    (dE/dgamma_aa, dE/dgamma_ab, dE/dgamma_bb)
 
-            其中 gamma = grad_rho·grad_rho
+            where gamma = grad_rho·grad_rho
     """
-    # 提取密度
+    # Extract the density
     if spin == 0:
         r = rho[:, 0]
         grho2 = rho[:, 1]**2 + rho[:, 2]**2 + rho[:, 3]**2
@@ -39,26 +41,26 @@ def my_xc(rho, spin=0, deriv=1, **kwargs):
         grho2_a = rho[:, 2]**2 + rho[:, 3]**2 + rho[:, 4]**2
         grho2_b = rho[:, 5]**2 + rho[:, 6]**2 + rho[:, 7]**2
 
-    # 你的泛函实现
-    exc = ...  # 交换相关能密度
-    vrho = ...  # 密度势
-    vgamma = ...  # 梯度势
+    # Implement the functional here
+    exc = ...  # Exchange-correlation energy density
+    vrho = ...  # Density potential
+    vgamma = ...  # Gradient potential
 
     return exc, vrho, vgamma
 ```
 
-### 2. LDA泛函实现
+### 2. Implementing LDA Functionals
 
-#### Slater交换 (LDA)
+#### Slater Exchange (LDA)
 ```python
 def lda_exchange(rho, spin=0, deriv=1):
     """
-    Slater交换泛函
+    Slater exchange functional.
     Ex = -3/4 * (3/π)^(1/3) * ∫ ρ^(4/3) dr
     """
     if spin == 0:
         r = rho[:, 0]
-        # 交换能密度
+        # Exchange energy density
         exc = -0.75 * (3/np.pi)**(1/3) * r**(4/3)
 
         if deriv == 1:
@@ -70,7 +72,7 @@ def lda_exchange(rho, spin=0, deriv=1):
     else:
         ra = rho[:, 0]
         rb = rho[:, 1]
-        # 自旋极化LDA交换
+        # Spin-polarized LDA exchange
         exc = -0.75 * (3/np.pi)**(1/3) * (
             ra**(4/3) + rb**(4/3)
         )
@@ -85,13 +87,13 @@ def lda_exchange(rho, spin=0, deriv=1):
     return exc
 ```
 
-#### VWN相关 (LDA)
+#### VWN Correlation (LDA)
 ```python
 def vwn_correlation(rho, spin=0, deriv=1):
     """
-    Vosko-Wilk-Nusair (VWN)相关泛函
+    Vosko-Wilk-Nusair (VWN) correlation functional.
     """
-    # VWN参数 (参数来自原始论文)
+    # VWN parameters from the original paper
     A = 0.0310907
     x0 = -0.10498
     b = 3.72744
@@ -99,7 +101,7 @@ def vwn_correlation(rho, spin=0, deriv=1):
 
     def vwn_func(rs):
         """
-        rs = (3/(4πρ))^(1/3)  Wigner-Seitz半径
+        rs = (3/(4πρ))^(1/3), the Wigner-Seitz radius.
         """
         x = np.sqrt(rs)
         X = x + b*x0 + c*x0**2
@@ -113,7 +115,7 @@ def vwn_correlation(rho, spin=0, deriv=1):
                   (b*x0)/Q * np.arctan((2*x0 + b)/Q) -
                   (x0*x)/fx)
 
-        # 导数
+        # Derivative
         dec_drs = -A/3 * (
             1/x - (2*x + b)/X +
             2*b/Q * (1/(2*x + b + Q*x) + 1/(2*x + b - Q*x))
@@ -137,21 +139,21 @@ def vwn_correlation(rho, spin=0, deriv=1):
             return exc, vrho, vgamma
 
     else:
-        # 自旋极化VWN (更复杂)
+        # Spin-polarized VWN (more involved)
         ra = rho[:, 0]
         rb = rho[:, 1]
         r = ra + rb
-        zeta = (ra - rb) / r  # 自旋极化参数
+        zeta = (ra - rb) / r  # Spin-polarization parameter
 
         rs = (3/(4*np.pi*r))**(1/3)
-        ec0, dec_drs = vwn_func(rs)  # 无自旋极化
+        ec0, dec_drs = vwn_func(rs)  # Unpolarized value
 
-        # 自旋极化校正 (简化版)
-        alpha = 0.001  # 参数
+        # Simplified spin-polarization correction
+        alpha = 0.001  # Parameter
         exc = ec0 * (1 + alpha * f(zeta))
 
         if deriv == 1:
-            # 完整的自旋极化导数更复杂
+            # The complete spin-polarized derivative is more involved
             vrho_a = ...  # dE/drho_a
             vrho_b = ...  # dE/drho_b
             vrho = np.stack([vrho_a, vrho_b], axis=1)
@@ -161,17 +163,17 @@ def vwn_correlation(rho, spin=0, deriv=1):
     return exc
 ```
 
-### 3. GGA泛函实现
+### 3. Implementing GGA Functionals
 
-#### Becke88交换 (B88)
+#### Becke88 Exchange (B88)
 ```python
 def becke88_exchange(rho, spin=0, deriv=1):
     """
-    Becke 1988 GGA交换泛函
+    Becke 1988 GGA exchange functional.
     Ex = ∫ εx^LDA * Fx(s) dr
-    其中 s = |∇ρ| / (2kF ρ) 是约化密度梯度
+    where s = |∇ρ| / (2kF ρ) is the reduced density gradient.
     """
-    beta = 0.0042  # Becke参数
+    beta = 0.0042  # Becke parameter
 
     if spin == 0:
         r = rho[:, 0]
@@ -181,41 +183,41 @@ def becke88_exchange(rho, spin=0, deriv=1):
 
         grho2 = grx**2 + gry**2 + grz**2
 
-        # 约化密度梯度
+        # Reduced density gradient
         kF = (3*np.pi**2*r)**(1/3)
         s = np.sqrt(grho2) / (2*kF*r + 1e-12)
 
-        # LDA交换
+        # LDA exchange
         ex_lda = -0.75 * (3/np.pi)**(1/3) * r**(4/3)
 
-        # Becke增强因子
+        # Becke enhancement factor
         s2 = s**2
         asinh_s = np.arcsinh(s)
         Fx = 1 + beta * s2 / (1 + 6*beta*s*asinh_s)
 
-        # 交换能密度
+        # Exchange energy density
         exc = ex_lda * Fx
 
         if deriv == 1:
-            # 势计算需要dFx/ds
+            # Computing the potential requires dFx/ds
             # Vx = dEx/drho - ∇·(dEx/d∇ρ)
-            # 这是一个复杂的泛函导数计算
+            # This is a nontrivial functional-derivative calculation
 
-            # 简化版：仅返回LDA势
+            # Simplified version: return only the LDA potential
             vrho = ex_lda * (4/3) / (r + 1e-12) * Fx
             vgamma = np.zeros_like(rho[:, 0])
 
-            # 完整的GGA势需要tau项
+            # The complete GGA potential requires the tau term
             return exc, vrho, vgamma
 
     return exc
 ```
 
-#### PBE交换
+#### PBE Exchange
 ```python
 def pbe_exchange(rho, spin=0, deriv=1):
     """
-    Perdew-Burke-Ernzerhof交换泛函
+    Perdew-Burke-Ernzerhof exchange functional.
     """
     kappa = 0.804
     mu = 0.21951
@@ -227,16 +229,16 @@ def pbe_exchange(rho, spin=0, deriv=1):
         kF = (3*np.pi**2*r)**(1/3)
         s = np.sqrt(grho2) / (2*kF*r + 1e-12)
 
-        # PBE增强因子
+        # PBE enhancement factor
         Fx = 1 + kappa - kappa / (1 + mu*s**2/kappa)
 
-        # LDA交换
+        # LDA exchange
         ex_lda = -0.75 * (3/np.pi)**(1/3) * r**(4/3)
 
         exc = ex_lda * Fx
 
         if deriv == 1:
-            # PBE势 (简化版)
+            # Simplified PBE potential
             vrho = ex_lda * (4/3) / (r + 1e-12) * Fx
             vgamma = np.zeros_like(rho[:, 0])
             return exc, vrho, vgamma
@@ -244,13 +246,13 @@ def pbe_exchange(rho, spin=0, deriv=1):
     return exc
 ```
 
-### 4. 杂化泛函
+### 4. Hybrid Functionals
 
-#### B3LYP手动实现
+#### Manual B3LYP Implementation
 ```python
 def b3lyp_functional(mol):
     """
-    手动实现B3LYP泛函
+    Manual implementation of the B3LYP functional.
     Ex = 0.2*Ex^HF + 0.08*Ex^LDA + 0.72*Ex^B88
     Ec = 0.19*Ec^VWN + 0.81*Ec^LYP
     """
@@ -258,10 +260,10 @@ def b3lyp_functional(mol):
 
     mf = dft.RKS(mol)
 
-    # 设置杂化参数
+    # Set the hybrid parameters
     mf.xc = {
         'hybrid': {
-            'hf_fraction': 0.2,  # 20% HF交换
+            'hf_fraction': 0.2,  # 20% HF exchange
         },
         'RXC': {
             'type': 'GGA',
@@ -276,57 +278,57 @@ def b3lyp_functional(mol):
         }
     }
 
-    # 或者更简单的方式
+    # Or use the simpler form
     mf.xc = 'b3lyp'
 
     return mf
 ```
 
-#### 自定义杂化泛函
+#### Custom Hybrid Functional
 ```python
 def custom_hybrid(mol, hf_fraction=0.25, xc_dft='pbe'):
     """
-    自定义杂化泛函
+    Custom hybrid functional.
     Ex = α*Ex^HF + (1-α)*Ex^DFT
     """
     mf = dft.RKS(mol)
 
-    # 通过字符串指定
+    # Specify it with a string
     mf.xc = f'{hf_fraction}*HF + {1-hf_fraction}*{xc_dft}'
 
-    # 或者通过字典
+    # Or use the comma-separated form
     mf.xc = f'{hf_fraction}*HF,{xc_dft}'
 
     return mf
 ```
 
-### 5. 应用自定义泛函
+### 5. Applying a Custom Functional
 
 ```python
 from pyscf import gto, dft, lib
 
-# 定义分子
+# Define the molecule
 mol = gto.M(
     atom='H 0 0 0; H 0 0 0.74',
     basis='sto-3g'
 )
 
-# 方法1: 直接赋值泛函函数
+# Method 1: assign the functional directly
 mf = dft.RKS(mol)
-mf._numint._xc = my_xc  # 替换泛函计算函数
+mf._numint._xc = my_xc  # Replace the functional-evaluation function
 e = mf.kernel()
 
-# 方法2: 通过libxc注册
-# 注册新泛函
+# Method 2: register it through libxc
+# Register the new functional
 libxc.define_xc_ = libxc.define_xc_.copy()
 libxc.define_xc_('MY_XC', my_xc)
 
-# 使用
+# Use it
 mf = dft.RKS(mol)
 mf.xc = 'MY_XC'
 e = mf.kernel()
 
-# 方法3: 使用NumInt对象
+# Method 3: use a NumInt object
 from pyscf.dft import numint
 
 ni = numint.NumInt()
@@ -337,11 +339,11 @@ mf._numint = ni
 e = mf.kernel()
 ```
 
-## 积分操作
+## Integral Operations
 
-### 1. 双电子积分
+### 1. Two-Electron Integrals
 
-#### 原始双电子积分 (8重对称)
+#### Raw Two-Electron Integrals (8-Fold Symmetry)
 ```python
 from pyscf import gto
 
@@ -350,130 +352,130 @@ mol = gto.M(
     basis='sto-3g'
 )
 
-# 完全双电子积分 (8重对称)
+# Full two-electron integrals (8-fold symmetry)
 # (ij|kl) ~ (ji|kl) ~ (ij|lk) ~ ...
 eri = mol.intor('int2e')
-print(f"积分形状: {eri.shape}")  # (nao, nao, nao, nao)
+print(f"Integral shape: {eri.shape}")  # (nao, nao, nao, nao)
 
-# 特定积分
+# A specific integral
 i, j, k, l = 0, 0, 0, 0
 value = eri[i, j, k, l]
 print(f"({i}{j}|{k}{l}) = {value:.6f}")
 ```
 
-#### 4重对称积分
+#### 4-Fold-Symmetric Integrals
 ```python
-# 4重对称: (ij|kl) = (kl|ij)
+# 4-fold symmetry: (ij|kl) = (kl|ij)
 eri_4 = mol.intor('int2e_sph', aosym=4)
-print(f"4重对称形状: {eri_4.shape}")  # (nao*(nao+1)/2, nao*(nao+1)/2)
+print(f"4-fold-symmetric shape: {eri_4.shape}")  # (nao*(nao+1)/2, nao*(nao+1)/2)
 ```
 
-#### 密度拟合积分
+#### Density-Fitting Integrals
 ```python
 from pyscf import df
 
-# 创建DF对象
+# Create the DF object
 dfobj = df.DF(mol)
 dfobj.auxbasis = 'cc-pvdz-ri'
 
-# 计算3中心积分 (ij|A)
+# Compute 3-center integrals (ij|A)
 ijA = dfobj.get_2c2e()  # (naux, nao, nao)
 
-# 计算2中心积分 (A|B)
+# Compute 2-center integrals (A|B)
 AB = dfobj.get_2c2e_aux()  # (naux, naux)
 
-# 拟合双电子积分
-eri_df = dfobj.get_j()  # 近似双电子积分
+# Fit the two-electron integrals
+eri_df = dfobj.get_j()  # Approximate two-electron integrals
 ```
 
-### 2. AO到MO积分变换
+### 2. AO-to-MO Integral Transformation
 
-#### 完全变换 (内存密集)
+#### Full Transformation (Memory Intensive)
 ```python
 from pyscf import ao2mo
 
-# AO基双电子积分
+# Two-electron integrals in the AO basis
 eri_ao = mol.intor('int2e')
 
-# MO系数
+# MO coefficients
 C = mf.mo_coeff  # (nao, nmo)
 
-# 完全变换到MO基
+# Full transformation to the MO basis
 eri_mo = ao2mo.incore.full(eri_ao, C)
-print(f"MO积分形状: {eri_mo.shape}")  # (nmo, nmo, nmo, nmo)
+print(f"MO integral shape: {eri_mo.shape}")  # (nmo, nmo, nmo, nmo)
 
-# 特定MO积分
-i, j, k, l = 0, 1, 2, 3  # 轨道索引
+# A specific MO integral
+i, j, k, l = 0, 1, 2, 3  # Orbital indices
 value = eri_mo[i, j, k, l]
 print(f"({i}{j}|{k}{l})_MO = {value:.6f}")
 ```
 
-#### 部分变换 (占据-占据)
+#### Partial Transformation (Occupied-Occupied)
 ```python
-# 占据轨道
+# Occupied orbitals
 nocc = mol.nelectron // 2
 C_occ = C[:, :nocc]  # (nao, nocc)
 
-# 仅计算占据-占据积分
+# Compute only occupied-occupied integrals
 eri_oooo = ao2mo.incore.general(eri_ao,
                                 [C_occ, C_occ, C_occ, C_occ])
-print(f"(oo|oo)形状: {eri_oooo.shape}")  # (nocc*nocc, nocc*nocc)
+print(f"(oo|oo) shape: {eri_oooo.shape}")  # (nocc*nocc, nocc*nocc)
 ```
 
-#### 外存变换 (大分子)
+#### Out-of-Core Transformation (Large Molecules)
 ```python
-# 保存到磁盘
+# Save to disk
 ao2mo.outcore.full(mol, C, 'eri_mo.h5')
 
-# 读取特定块
+# Read a specific block
 from pyscf import lib
 with lib.H5File('eri_mo.h5', 'r') as f:
     eri_block = f['eri_mo'][:10, :10, :10, :10]
 
-# 或者使用内存映射
+# Or use memory mapping
 eri_mo = ao2mo.load('eri_mo.h5')
 ```
 
-### 3. 积分导数
+### 3. Integral Derivatives
 
-#### 基函数导数积分
+#### Basis-Function Derivative Integrals
 ```python
-# 基函数梯度: d/dx χ_a(r)
+# Basis-function gradient: d/dx χ_a(r)
 # dS_ij/dx_A = ∫ [dχ_i/dx_A χ_j + χ_i dχ_j/dx_A] dr
 
-# 重叠矩阵导数
+# Overlap-matrix derivative
 dS_dx = mol.intor('int1e_ovlp_ip1', comp=3)  # (3, nao, nao)
 # dS_dx[0] = d/dx, dS_dx[1] = d/dy, dS_dx[2] = d/dz
 
-# 动能矩阵导数
+# Kinetic-energy matrix derivative
 dT_dx = mol.intor('int1e_kin_ip1', comp=3)
 
-# 核吸引矩阵导数
+# Nuclear-attraction matrix derivative
 dV_dx = mol.intor('int1e_nuc_ip1', comp=3)
 ```
 
-#### 双电子积分导数
+#### Two-Electron Integral Derivatives
 ```python
-# 双电子积分导数 (3中心)
+# Two-electron integral derivative (3-center)
 # d(ij|kl)/dA = d/dx_A (ij|kl)
 eri_ip1 = mol.intor('int2e_ip1', comp=3)
-print(f"积分导数形状: {eri_ip1.shape}")  # (3, nao, nao, nao, nao)
+print(f"Integral-derivative shape: {eri_ip1.shape}")  # (3, nao, nao, nao, nao)
 ```
 
-### 4. 相对论积分
+### 4. Relativistic Integrals
 
 #### DKH (Douglas-Kroll-Hess)
 ```python
-# Douglas-Kroll-Hess哈密顿量
+# Douglas-Kroll-Hess Hamiltonian
 from pyscf.dkh import dkh
 
-# DKH2阶
+# DKH2
 dkh2 = dkh.make_dkh2_hamiltonian(mol)
 
-# DKH修正的动能和势能
+# DKH-corrected kinetic and potential energies
 T_dkh, V_dkh = dkh2
 
-# 在SCF中使用
+# Use in SCF
 mf = scf.RHF(mol)
 mf.get_hcore = lambda *args: T_dkh + V_dkh
 mf.kernel()
@@ -485,164 +487,164 @@ from pyscf.sfx2c1e import sfx2c1e
 
 # Spin-free X2C1e
 mf = scf.RHF(mol)
-mf = sfx2c1e.get_x2c(mf)  # 转换为相对论SCF
+mf = sfx2c1e.get_x2c(mf)  # Convert to relativistic SCF
 mf.kernel()
 ```
 
-## SCF高级控制
+## Advanced SCF Control
 
-### 1. DIIS加速
+### 1. DIIS Acceleration
 
-#### 自定义DIIS
+#### Custom DIIS
 ```python
 from pyscf.scf import diis
 
-# DIIS类
+# DIIS object
 my_diis = diis.DIIS()
 
-# SCF循环
+# SCF cycle
 for cycle in range(max_cycle):
-    # 构建Fock矩阵
+    # Build the Fock matrix
     fock = build_fock(dm)
 
-    # DIIS外推
+    # DIIS extrapolation
     if cycle >= diis_start:
         fock = my_diis.update(fock, x=dm)
 
-    # 对角化
+    # Diagonalize
     mo_energy, mo_coeff = eig(fock, S)
 
-    # 新密度
+    # New density
     dm_new = build_density(mo_coeff)
 
-    # 收敛检查
+    # Check convergence
     if converged(dm, dm_new):
         break
 
     dm = dm_new
 ```
 
-#### DIIS误差向量
+#### DIIS Error Vector
 ```python
-# 自定义误差向量
+# Custom error vector
 def error_vector(fock, dm, S):
     """
-    DIIS误差: [F,D]S = FDS - SDF
+    DIIS error: [F,D]S = FDS - SDF
     """
     return fock @ dm @ S - S @ dm @ fock
 
-# 在DIIS中使用
+# Use it in DIIS
 my_diis = diis.DIIS()
 error = error_vector(fock, dm, S)
 fock = my_diis.update(fock, x=dm, errvec=error)
 ```
 
-### 2. 直接SCF
+### 2. Direct SCF
 
-#### 控制直接计算
+#### Controlling Direct Evaluation
 ```python
 mf = scf.RHF(mol)
 
-# 完全直接 (每次重新计算积分)
+# Fully direct: recompute integrals in every cycle
 mf.direct_scf = True
 
-# 半直接 (缓存一些积分)
+# Semidirect: cache selected integrals
 mf.direct_scf = False
-mf._eri = mol.intor('int2e')  # 预计算所有积分
+mf._eri = mol.intor('int2e')  # Precompute all integrals
 
-# 混合模式
+# Hybrid mode
 mf.direct_scf = True
-mf.direct_scf_tol = 1e-12  # 积分阈值
+mf.direct_scf_tol = 1e-12  # Integral threshold
 ```
 
-#### 内存管理
+#### Memory Management
 ```python
-# 设置最大内存
-lib.num_threads(4)  # 4线程
-lib.chkfile.save_temp(mol.chkfile, mf.get_fock())  # 保存中间结果
+# Set the thread count
+lib.num_threads(4)  # 4 threads
+lib.chkfile.save_temp(mol.chkfile, mf.get_fock())  # Save intermediate results
 
-# 外存SCF
+# Out-of-core SCF
 mf.chkfile = 'calc.chk'
 mf.kernel()
-# 中间结果会保存到检查点
+# Intermediate results are saved to the checkpoint file
 ```
 
-### 3. SCF稳定化
+### 3. SCF Stabilization
 
-#### 稳定性分析
+#### Stability Analysis
 ```python
-# 检查SCF解的稳定性
+# Check the stability of the SCF solution
 mf = scf.RHF(mol)
 mf.kernel()
 
-# 稳定性分析
+# Stability analysis
 from pyscf.scf import stability
 
-# 内部稳定性 (UHF不稳定?)
+# Internal stability (possible UHF instability)
 stable = stability.stability_internal(mf)
-print(f"内部稳定: {stable}")
+print(f"Internally stable: {stable}")
 
-# 外部稳定性 (存在更低能解?)
+# External stability (is there a lower-energy solution?)
 stable2, e_new, mf_new = stability.stability_external(mf)
-print(f"外部稳定: {stable2}")
+print(f"Externally stable: {stable2}")
 
-# 如果不稳定，使用新的SCF
+# If unstable, use the new SCF solution
 if not stable2:
     mf_new.kernel()
 ```
 
-#### 阻尼和水平位移
+#### Damping and Level Shifting
 ```python
-# 阻尼 (振荡问题)
+# Damping for oscillatory convergence
 mf = scf.RHF(mol)
-mf.damp = 0.2  # 20%阻尼
+mf.damp = 0.2  # 20% damping
 mf.kernel()
 
-# 水平位移 (收敛慢)
+# Level shifting for slow convergence
 mf = scf.RHF(mol)
-mf.level_shift = 0.5  # 虚轨道位移0.5 Ha
+mf.level_shift = 0.5  # Shift virtual orbitals by 0.5 Ha
 mf.kernel()
 
-# 组合使用
+# Combine both methods
 mf.damp = 0.2
 mf.level_shift = 0.5
-mf.diis_start_cycle = 5  # 延迟DIIS
+mf.diis_start_cycle = 5  # Delay DIIS
 ```
 
 ### 4. Newton-Raphson SCF
 
-#### 二阶SCF
+#### Second-Order SCF
 ```python
-# Newton-Raphson方法 (快速收敛，但不稳定)
+# Newton-Raphson method (fast convergence, but potentially unstable)
 mf = scf.RHF(mol)
-mf_nr = mf.newton()  # 创建NR-SCF
+mf_nr = mf.newton()  # Create the NR-SCF object
 mf_nr.kernel()
 
-# 带约束的NR-SCF
-mf_nr.constrain_occ = True  # 保持占据
+# Constrained NR-SCF
+mf_nr.constrain_occ = True  # Preserve occupations
 mf_nr.kernel()
 ```
 
-#### 奇数电子系统
+#### Odd-Electron Systems
 ```python
-# ROHF稳定性
+# ROHF stability
 mol = gto.M(atom='C 0 0 0', charge=0, spin=2, basis='sto-3g')
 mf = scf.ROHF(mol)
 mf.kernel()
 
-# 转换为UHF并稳定化
+# Convert to UHF and stabilize
 mf_uhf = scf.UHF(mol)
 mf_uhf.kernel()
 
-# 稳定性检查
+# Stability check
 mf_uhf_stable = stability.stability_internal(mf_uhf)
 ```
 
-## TDDFT高级功能
+## Advanced TDDFT Features
 
-### 1. 自然跃迁轨道 (NTO)
+### 1. Natural Transition Orbitals (NTOs)
 
-#### 深度NTO分析
+#### Detailed NTO Analysis
 ```python
 from pyscf import tdscf
 
@@ -650,292 +652,229 @@ td = tdscf.TDDFT(mf)
 td.nstates = 5
 td.kernel()
 
-# 所有态的NTO
+# NTOs for all states
+nocc = np.count_nonzero(mf.mo_occ > 0)
 for n in range(td.nstates):
-    weights, nto = td.get_nto(state=n)
+    weights, nto_coeff = td.get_nto(state=n + 1)
 
-    print(f"\n态 {n+1}:")
-    print(f"  激发能: {td.e[n]*27.2114:.2f} eV")
-    print(f"  主导权重: {weights.max():.4f}")
+    print(f"\nState {n+1}:")
+    print(f"  Excitation energy: {td.e[n]*27.2114:.2f} eV")
+    print(f"  Leading weight: {weights.max():.4f}")
 
-    # 空穴和电子轨道
-    hole = nto[0]  # (nao, nocc)
-    electron = nto[1]  # (nao, nvirt)
+    # PySCF returns occupied NTOs followed by virtual NTOs.
+    occupied_ntos = nto_coeff[:, :nocc]
+    virtual_ntos = nto_coeff[:, nocc:]
 
-    # 主导NTO对
+    # Dominant NTO pair
     dominant_pair = np.argmax(weights)
-    print(f"  主导对权重: {weights[dominant_pair]:.4f}")
+    print(f"  Dominant-pair weight: {weights[dominant_pair]:.4f}")
 
-    # 分析主导NTO的轨道成分
-    hole_orb = hole[:, dominant_pair]  # (nao,)
-    electron_orb = electron[:, dominant_pair]
-
-    # 轨道成分分析
-    from pyscf.lo import iao
-    hole_iao = iao.mulliken_pop(mol, hole_orb)
-    electron_iao = iao.mulliken_pop(mol, electron_orb)
+    # Coefficient vectors for a downstream, separately validated population
+    # or fragment-projection analysis.
+    hole_orb = occupied_ntos[:, dominant_pair]  # (nao,)
+    electron_orb = virtual_ntos[:, dominant_pair]
 ```
 
-#### NTO可视化
+#### NTO Visualization
 ```python
-# 保存NTO到Molden文件
+# Save NTOs to Molden files
 from pyscf.tools import molden
 
+nocc = np.count_nonzero(mf.mo_occ > 0)
 for n in range(td.nstates):
-    weights, nto = td.get_nto(state=n)
+    weights, nto_coeff = td.get_nto(state=n + 1)
+    occupied_ntos = nto_coeff[:, :nocc]
+    virtual_ntos = nto_coeff[:, nocc:]
 
-    # 主导空穴轨道
-    hole = nto[0][:, np.argmax(weights)]
-    # 主导电子轨道
-    electron = nto[1][:, np.argmax(weights)]
+    # Dominant hole orbital
+    hole = occupied_ntos[:, np.argmax(weights)]
+    # Dominant electron orbital
+    electron = virtual_ntos[:, np.argmax(weights)]
 
-    # 保存
+    # Save
     molden.from_mo(mol, f'hole_state{n+1}.molden', hole)
     molden.from_mo(mol, f'electron_state{n+1}.molden', electron)
 ```
 
-### 2. TDDFT密度分析
+### 2. TDDFT Density Analysis
 
-#### 激发态密度差
-```python
-# 基态密度
-rho0 = mf.get_rho()
+The core TD-SCF interface exposes excitation energies, response amplitudes,
+transition moments, oscillator strengths, gradients, and NTOs. It does not
+provide one method-independent excited-state density interface suitable for
+the executable example previously shown here. Use a density implementation
+documented for the selected PySCF method and version, then validate the density
+trace, spin convention, AO ordering, coordinate units, and state identity
+before deriving atomic charge differences or a charge-transfer distance.
 
-# 激发态密度 (态1)
-dm1 = td.generate_density(state=0)  # 第1激发态
-rho1 = td.get_rho(dm1)
+Do not substitute AO populations for atomic charges. A charge-transfer metric
+also needs an explicitly defined scalar reduction of the charge-displacement
+vector and an explicit Bohr-to-angstrom conversion when coordinates are in
+atomic units. See the [PySCF TD-SCF documentation](https://pyscf.org/user/tddft.html)
+for the currently supported public properties.
 
-# 密度差
-delta_rho = rho1 - rho0
+### 3. Spin-Orbit Coupling (SOC)
 
-# 保存密度差
-from pyscf.tools import cubegen
-cubegen.density(mol, 'delta_rho.cube', dm1 - mf.make_rdm1())
+The repository does not provide a validated, general TDDFT spin-orbit coupling
+implementation. Do not infer a coupling matrix from an undocumented convenience
+module or insert a placeholder coupling into a rate calculation. Select and
+document a supported relativistic/SOC workflow, state convention, and unit
+conversion, and retain its source output as provenance before using the result.
 
-# 分析
-print(f"密度差积分 (应接近0): {delta_rho.sum():.6f}")
-print(f"密度差极值: {delta_rho.min():.6f}, {delta_rho.max():.6f}")
-```
-
-#### 电荷转移分析
-```python
-def charge_transfer_analysis(mol, dm_excited):
-    """
-    分析激发态的电荷转移
-    """
-    from pyscf import lo
-
-    # Mulliken布居
-    pop_excited = mf.mulliken_pop(mol, dm_excited)
-    pop_ground = mf.mulliken_pop(mol, mf.make_rdm1())
-
-    # 电荷变化
-    delta_charge = pop_excited[0] - pop_ground[0]
-
-    print("电荷变化 (e):")
-    for i in range(mol.natm):
-        atom = mol.atom_pure_symbol(i)
-        print(f"  {atom}{i}: {delta_charge[i]:+.4f}")
-
-    # 电荷转移距离
-    # d_CT = |Σ q_i * r_i| / Σ |q_i|
-    coords = np.array([mol.atom_coord(i) for i in range(mol.natm)])
-    ct_distance = np.abs(np.sum(delta_charge[:, None] * coords, axis=0))
-    ct_distance /= np.sum(np.abs(delta_charge))
-
-    print(f"\n电荷转移距离: {ct_distance:.3f} Å")
-
-    return delta_charge
-
-# 分析第一激发态
-dm1 = td.generate_density(state=0)
-charge_transfer_analysis(mol, dm1)
-```
-
-### 3. 自旋轨道耦合 (SOC)
-
-#### 单组态相互作用
-```python
-from pyscf import lib
-
-# 自旋轨道耦合矩阵
-# SOC = <Ψ_S,M_S|H_SO|Ψ'_S',M'_S'>
-
-# 对于TDDFT态，需要计算SOC矩阵元
-# 这是一个高级功能，需要扩展PySCF
-
-# 简化方案: 使用PySCF的spin-orbit模块
-from pyscf.spinorbit import soc
-
-# SOC需要4分量 relativistic SCF
-from pyscf.x2c import X2C
-mol_r = X2C(mol)
-mf_r = scf.RHF(mol_r)
-mf_r.kernel()
-
-# SOC计算
-soc_mat = soc.spin_orbit_coulomb(mf_r, td)
-print(f"SOC矩阵形状: {soc_mat.shape}")
-
-# 耦合强度
-print(f"SOC强度: {np.linalg.norm(soc_mat):.4f} cm^-1")
-```
-
-## MP2和后-HF方法
+## MP2 and Post-HF Methods
 
 ### 1. MP2
 
-#### RMP2计算
+#### RMP2 Calculation
 ```python
 from pyscf import mp
 
-# MP2对象
+# MP2 object
 mp2 = mp.MP2(mf)
 e_mp2, t2 = mp2.kernel()
 
-print(f"MP2相关能: {e_mp2:.6f} Ha")
-print(f"总能量 (HF+MP2): {mf.e_tot + e_mp2:.6f} Ha")
+print(f"MP2 correlation energy: {e_mp2:.6f} Ha")
+print(f"Total energy (HF+MP2): {mf.e_tot + e_mp2:.6f} Ha")
 
-# MP2能量分解
+# MP2 energy decomposition
 # E(MP2) = E(HF) + E_2
 # E_2 = Σ_{ijab} |<ij||ab>|^2 / (ε_i+ε_j-ε_a-ε_b)
 
-# 轨道能量
-eps_i = mf.mo_energy[:nocc]  # 占据
-eps_a = mf.mo_energy[nocc:]  # 虚轨道
+# Orbital energies
+eps_i = mf.mo_energy[:nocc]  # Occupied
+eps_a = mf.mo_energy[nocc:]  # Virtual
 
-# 顶点: <ij||ab> = <ij|ab> - <ij|ba>
-# 存储在t2中
+# Vertex: <ij||ab> = <ij|ab> - <ij|ba>
+# Stored in t2
 
-# 诊断参数
+# Diagnostic parameters
 # D1 = Σ_{ijab} |t2_{ijab}|^2
 # T1 = Σ_{ia} |t1_{ia}|  (for MP3+)
 
 d1 = mp2.get_d1()
 t1 = mp2.get_t1()
 
-print(f"D1诊断: {d1:.3f} (理想 < 0.02)")
-print(f"T1诊断: {t1:.3f} (理想 < 0.02)")
+print(f"D1 diagnostic: {d1:.3f} (ideal < 0.02)")
+print(f"T1 diagnostic: {t1:.3f} (ideal < 0.02)")
 
-# 多参考警告
+# Multireference warning
 if d1 > 0.02 or t1 > 0.02:
-    print("警告: 多参考效应显著，考虑CASSCF")
+    print("Warning: Significant multireference character; consider CASSCF")
 ```
 
-#### 局域MP2 (LMP2)
+#### Local MP2 (LMP2)
 ```python
-# 密度拟合MP2
+# Density-fitted MP2
 mp2_df = mp.DFMP2(mf)
 mp2_df.auxbasis = 'cc-pvtz-ri'
 e_mp2_df = mp2_df.kernel()[0]
 
-print(f"DF-MP2相关能: {e_mp2_df:.6f} Ha")
-print(f"与标准MP2差: {abs(e_mp2 - e_mp2_df):.6f} Ha")
+print(f"DF-MP2 correlation energy: {e_mp2_df:.6f} Ha")
+print(f"Difference from conventional MP2: {abs(e_mp2 - e_mp2_df):.6f} Ha")
 ```
 
-#### RI-MP2 (密度拟合)
+#### RI-MP2 (Density Fitting)
 ```python
-# 使用Resolution-of-Identity
+# Use the resolution of the identity
 mp2_ri = mp.MP2(mf)
 mp2_ri.with_df = df.DF(mol)
 mp2_ri.with_df.auxbasis = 'cc-pvdz-ri'
 e_mp2_ri = mp2_ri.kernel()[0]
 
-print(f"RI-MP2相关能: {e_mp2_ri:.6f} Ha")
+print(f"RI-MP2 correlation energy: {e_mp2_ri:.6f} Ha")
 ```
 
-### 2. 耦合簇
+### 2. Coupled Cluster
 
 #### CCSD
 ```python
 from pyscf import cc
 
-# CCSD对象
+# CCSD object
 ccsd = cc.CCSD(mf)
 e_ccsd, t1, t2 = ccsd.kernel()
 
-print(f"CCSD相关能: {e_ccsd:.6f} Ha")
-print(f"总能量: {mf.e_tot + e_ccsd:.6f} Ha")
+print(f"CCSD correlation energy: {e_ccsd:.6f} Ha")
+print(f"Total energy: {mf.e_tot + e_ccsd:.6f} Ha")
 
-# T1诊断
+# T1 diagnostic
 t1_norm = np.linalg.norm(t1)
-print(f"T1诊断: {t1_norm:.3f}")
+print(f"T1 diagnostic: {t1_norm:.3f}")
 
-# CCSD(T) - 黄金标准
+# CCSD(T), the gold standard
 e_ccsdt = ccsd.ccsd_t()
-print(f"(T)校正: {e_ccsdt:.6f} Ha")
-print(f"CCSD(T)总能量: {mf.e_tot + e_ccsd + e_ccsdt:.6f} Ha")
+print(f"(T) correction: {e_ccsdt:.6f} Ha")
+print(f"CCSD(T) total energy: {mf.e_tot + e_ccsd + e_ccsdt:.6f} Ha")
 ```
 
-#### 分解
+#### Decomposition
 ```python
 # E(CCSD) = Σ_{ia} t_{ia} <ia||ia> + Σ_{ijab} t_{ijab} <ij||ab>
 
-# 部分能量
-e_1 = ccsd.energy1()  # 单激发
-e_2 = ccsd.energy2()  # 双激发
+# Component energies
+e_1 = ccsd.energy1()  # Singles
+e_2 = ccsd.energy2()  # Doubles
 
-print(f"E(单): {e_1:.6f} Ha")
-print(f"E(双): {e_2:.6f} Ha")
+print(f"E(singles): {e_1:.6f} Ha")
+print(f"E(doubles): {e_2:.6f} Ha")
 ```
 
-#### Lambda方程 (激发态)
+#### Lambda Equations (Excited States)
 ```python
-# CCSD Lambda方程 (用于激发态)
+# CCSD Lambda equations for excited states
 ccsd_lambda = cc.ccsd_lambda.CCSD_Lambda(ccsd)
 
-# 基态Lambda
+# Ground-state Lambda amplitudes
 l1, l2 = ccsd_lambda.kernel()
 
-# EOM-CCSD (方程运动耦合簇)
+# EOM-CCSD (equation-of-motion coupled cluster)
 from pyscf import cc
 
-eom = cc.eom_rccsd.EOMIP(ccsd)  # 电离
-# eom = cc.eom_rccsd.EOMEA(ccsd)  # 电子亲和
-# eom = cc.eom_rccsd.EOMEES(ccsd)  # 激发态
+eom = cc.eom_rccsd.EOMIP(ccsd)  # Ionization
+# eom = cc.eom_rccsd.EOMEA(ccsd)  # Electron attachment
+# eom = cc.eom_rccsd.EOMEES(ccsd)  # Excited states
 
-ip_e, ip_vec = eom.ipccsd(nroots=3)  # 3个电离态
-print(f"垂直电离能 (eV):")
+ip_e, ip_vec = eom.ipccsd(nroots=3)  # 3 ionized states
+print("Vertical ionization energies (eV):")
 for i, e in enumerate(ip_e):
-    print(f"  态{i+1}: {e*27.2114:.2f} eV")
+    print(f"  State {i+1}: {e*27.2114:.2f} eV")
 ```
 
-### 3. CI方法
+### 3. CI Methods
 
-#### CIS (构型相互作用单激发)
+#### CIS (Configuration Interaction Singles)
 ```python
 from pyscf import ci
 
-# CIS对象
+# CIS object
 cis = ci.CIS(mf)
 cis.nstates = 5
 e_cis, civec = cis.kernel()
 
-print(f"CIS激发态:")
+print("CIS excited states:")
 for i in range(cis.nstates):
-    print(f"  态{i+1}: {e_cis[i]*27.2114:.2f} eV")
+    print(f"  State {i+1}: {e_cis[i]*27.2114:.2f} eV")
 ```
 
 #### CISD
 ```python
-# CISD (CIS + 双激发)
+# CISD (CIS plus double excitations)
 cisd = ci.CISD(mf)
 e_cisd, ci_vec = cisd.kernel()
 
-print(f"CISD相关能: {e_cisd - mf.e_tot:.6f} Ha")
+print(f"CISD correlation energy: {e_cisd - mf.e_tot:.6f} Ha")
 
-# Davidson算法
-cisd.max_space = 100  # Davidson子空间大小
+# Davidson algorithm
+cisd.max_space = 100  # Davidson subspace size
 e_cisd, ci_vec = cisd.kernel()
 ```
 
-### 4. FCI (全CI)
+### 4. FCI (Full CI)
 
-#### 小系统FCI
+#### FCI for a Small System
 ```python
 from pyscf import fci
 
-# 小分子
+# Small molecule
 mol_small = gto.M(
     atom='H 0 0 0; H 0 0 0.74',
     basis='sto-3g'
@@ -943,70 +882,70 @@ mol_small = gto.M(
 mf_small = scf.RHF(mol_small)
 mf_small.kernel()
 
-# FCI计算
+# FCI calculation
 cisolver = fci.FCI(mf_small)
 e_fci, ci_vec = cisolver.kernel()
 
-print(f"FCI能量: {e_fci:.6f} Ha")
+print(f"FCI energy: {e_fci:.6f} Ha")
 print(f"FCI vs HF: {(e_fci - mf_small.e_tot)*27.2114:.2f} eV")
 
-# 精确波函数分析
-print(f"CI系数数: {len(ci_vec)}")
-print(f"主导构型权重: {abs(ci_vec).max():.4f}")
+# Exact wavefunction analysis
+print(f"Number of CI coefficients: {len(ci_vec)}")
+print(f"Leading-configuration weight: {abs(ci_vec).max():.4f}")
 ```
 
-#### 选定CI
+#### Selected CI
 ```python
-# 有限空间选定的CI
+# Selected CI in a finite space
 fcisolver = fci.FCI(mf_small)
-fcisolver.nroots = 3  # 多个态
+fcisolver.nroots = 3  # Multiple states
 
-# 选定空间
+# Selected space
 norb = mol_small.nao
 nelec = mol_small.nelectron
 
-# 手动选择轨道空间
-# 这里使用完整FCI
+# Select the orbital space manually
+# This example uses full CI
 e_fci, civec = fcisolver.kernel()
 ```
 
-## 密度拟合 (DF)
+## Density Fitting (DF)
 
-### 1. 基础DF
+### 1. Basic DF
 
 #### DF-SCF
 ```python
 from pyscf import df
 
-# 自动DF
+# Automatic DF
 mf = scf.RHF(mol)
 mf_df = mf.density_fit()
 
-# 或手动指定拟合基组
+# Or specify the fitting basis manually
 mf_df = df.density_fit(mf, auxbasis='def2-universal-jfit')
 
 e_df = mf_df.kernel()
-print(f"DF-RHF能量: {e_df:.6f} Ha")
+print(f"DF-RHF energy: {e_df:.6f} Ha")
 
-# 与标准RHF比较
-print(f"DF vs RHF能量差: {abs(e_df - mf.kernel()):.8f} Ha")
+# Compare with conventional RHF
+print(f"DF vs RHF energy difference: {abs(e_df - mf.kernel()):.8f} Ha")
 ```
 
-#### DF对象
+#### DF Object
 ```python
-# DF对象
+# DF object
 dfobj = df.DF(mol)
 dfobj.auxbasis = 'cc-pvdz-ri'
 
-# 3中心积分 (ij|P)
+# 3-center integrals (ij|P)
 ijP = dfobj.get_2c2e()
-print(f"(ij|P)形状: {ijP.shape}")  # (naux, nao, nao)
+print(f"(ij|P) shape: {ijP.shape}")  # (naux, nao, nao)
 
-# 2中心积分 (P|Q)
+# 2-center integrals (P|Q)
 PQ = dfobj.get_2c2e_aux()
-print(f"(P|Q)形状: {PQ.shape}")  # (naux, naux)
+print(f"(P|Q) shape: {PQ.shape}")  # (naux, naux)
 
-# 求解 (P|Q) * J^P = (ij|P)
+# Solve (P|Q) * J^P = (ij|P)
 # J = Σ_PQ (ij|P) * (P|Q)^(-1)
 ```
 
@@ -1016,53 +955,53 @@ print(f"(P|Q)形状: {PQ.shape}")  # (naux, naux)
 ```python
 from pyscf import mp
 
-# MP2 + DF
+# MP2 plus DF
 mp2 = mp.MP2(mf)
 mp2_df = mp.density_fit(mp2, auxbasis='cc-pvdz-ri')
 
 e_mp2_df = mp2_df.kernel()[0]
-print(f"DF-MP2相关能: {e_mp2_df:.6f} Ha")
+print(f"DF-MP2 correlation energy: {e_mp2_df:.6f} Ha")
 
-# 检查与标准MP2的差别
+# Check the difference from conventional MP2
 e_mp2_std = mp.MP2(mf).kernel()[0]
-print(f"DF vs 标准MP2: {abs(e_mp2_df - e_mp2_std):.6f} Ha")
+print(f"DF vs conventional MP2: {abs(e_mp2_df - e_mp2_std):.6f} Ha")
 ```
 
 ### 3. CCSD-DF
 
 #### DF-CCSD
 ```python
-# CCSD + DF
+# CCSD plus DF
 ccsd = cc.CCSD(mf)
 ccsd_df = ccsd.density_fit()
 
 e_ccsd_df = ccsd_df.kernel()[0]
-print(f"DF-CCSD相关能: {e_ccsd_df:.6f} Ha")
+print(f"DF-CCSD correlation energy: {e_ccsd_df:.6f} Ha")
 ```
 
-## 周期体系
+## Periodic Systems
 
-### 1. 周期性分子定义
+### 1. Defining Periodic Systems
 
-#### 1D周期
+#### 1D Periodicity
 ```python
 from pyscf.pbc import gto as pbcgto
 
-# 1D晶胞 (线性链)
+# 1D cell (linear chain)
 cell = pbcgto.M(
     atom='H 0 0 0',
     basis='sto-3g',
-    a=[[2.0, 0, 0], [0, 20, 0], [0, 0, 20]],  # 晶格向量
+    a=[[2.0, 0, 0], [0, 20, 0], [0, 0, 20]],  # Lattice vectors
     unit='Ang',
 )
 
-# k点采样
-kpts = cell.make_kpts([2, 1, 1])  # 2个k点
+# k-point sampling
+kpts = cell.make_kpts([2, 1, 1])  # 2 k-points
 ```
 
-#### 2D周期
+#### 2D Periodicity
 ```python
-# 2D晶胞 (石墨烯层)
+# 2D cell (graphene layer)
 cell = pbcgto.M(
     atom='''
     C  0.0000  0.0000  0.0000
@@ -1071,18 +1010,18 @@ cell = pbcgto.M(
     C  1.2308  2.1300  0.0000
     ''',
     basis='gth-szv',
-    a=[[2.4616, 0, 0], [0, 4.2600, 0], [0, 0, 20]],  # 平面周期
+    a=[[2.4616, 0, 0], [0, 4.2600, 0], [0, 0, 20]],  # In-plane periodicity
     pseudo='gth-pade',
-    ke_cutoff=100,  # 动能截断 (eV)
+    ke_cutoff=100,  # Kinetic-energy cutoff (eV)
 )
 
-# k点
+# k-points
 kpts = cell.make_kpts([4, 4, 1])
 ```
 
-#### 3D周期
+#### 3D Periodicity
 ```python
-# 3D晶胞 (硅)
+# 3D cell (silicon)
 cell = pbcgto.M(
     atom='Si 0 0 0; Si 0.25 0.25 0.25',
     basis='gth-szv',
@@ -1091,79 +1030,79 @@ cell = pbcgto.M(
     ke_cutoff=100,
 )
 
-# k点网格
+# k-point mesh
 kpts = cell.make_kpts([4, 4, 4])
 ```
 
-### 2. 周期SCF
+### 2. Periodic SCF
 
 #### Gamma-only
 ```python
 from pyscf.pbc import scf as pbcscf
 
-# 仅Gamma点
+# Gamma point only
 mf = pbcscf.RHF(cell)
 e_gam = mf.kernel()
-print(f"Gamma-only能量: {e_gam:.6f} Ha")
+print(f"Gamma-only energy: {e_gam:.6f} Ha")
 ```
 
-#### 多k点SCF
+#### Multiple-k-Point SCF
 ```python
-# 多k点
+# Multiple k-points
 mf = pbcscf.RHF(cell, kpts)
 e_kpts = mf.kernel()
-print(f"多k点能量: {e_kpts:.6f} Ha")
+print(f"Multiple-k-point energy: {e_kpts:.6f} Ha")
 
-# k点权重
-print(f"k点数: {len(kpts)}")
-print(f"总权重: {mf.kpts.sum()}")
+# k-point weights
+print(f"Number of k-points: {len(kpts)}")
+print(f"Total weight: {mf.kpts.sum()}")
 ```
 
-### 3. 周期DFT
+### 3. Periodic DFT
 
 #### PBC-DFT
 ```python
 from pyscf.pbc import dft as pbcdft
 
-# 周期DFT
+# Periodic DFT
 mf = pbcdft.RKS(cell, kpts)
 mf.xc = 'pbe'
-mf.grids.level = 3  # 网格精度
+mf.grids.level = 3  # Grid accuracy
 e_pbe = mf.kernel()
-print(f"PBE能量: {e_pbe:.6f} Ha")
+print(f"PBE energy: {e_pbe:.6f} Ha")
 ```
 
-#### 杂化泛函
+#### Hybrid Functionals
 ```python
-# 周期杂化泛函 (计算昂贵)
+# Periodic hybrid functional (computationally expensive)
 mf = pbcdft.RKS(cell, kpts)
-mf.xc = 'hse06'  # 屏蔽杂化
+mf.xc = 'hse06'  # Screened hybrid
 e_hse = mf.kernel()
-print(f"HSE06能量: {e_hse:.6f} Ha")
+print(f"HSE06 energy: {e_hse:.6f} Ha")
 
-# 或使用精确交换的密度拟合
+# Or use density fitting for exact exchange
 mf = pbcdft.RKS(cell, kpts)
 mf.xc = 'pbe0'
-mf = mf.density_fit()  # 加速HF交换
+mf = mf.density_fit()  # Accelerate HF exchange
 e_pbe0 = mf.kernel()
 ```
 
-### 4. 能带结构
+### 4. Band Structure
 
-#### 能带计算
+#### Band-Structure Calculation
 ```python
-# 计算能带路径
+# Compute the band path
 from pyscf.pbc import tools
 
-# 高对称点路径
+# High-symmetry-point path
 Gamma = [0, 0, 0]
 X = [0.5, 0, 0]
 M = [0.5, 0.5, 0]
 
-# 生成k路径
+# Generate the k-path
 kpath = tools.get_bandpath([Gamma, X, M], cell, 20)
 
-# 在每个k点计算能带
+# Compute bands at every k-point
 band_energies = []
 for k in kpath:
     mf_k = pbcdft.RKS(cell, k.reshape(1, 3))
@@ -1173,7 +1112,7 @@ for k in kpath:
 
 band_energies = np.array(band_energies)  # (nk, nmo)
 
-# 绘制能带
+# Plot the bands
 import matplotlib.pyplot as plt
 plt.plot(band_energies)
 plt.xlabel('k-path')
@@ -1182,34 +1121,34 @@ plt.title('Band Structure')
 plt.show()
 ```
 
-## 溶剂效应
+## Solvent Effects
 
-### 1. PCM (极化连续介质)
+### 1. PCM (Polarizable Continuum Model)
 
 #### PCM-SCF
 ```python
 from pyscf import solvent
 
-# PCM模型
+# PCM model
 pcm = solvent.PCM(mol)
-pcm.eps = 78.4  # 水的介电常数
-pcm.method = 'IEFPCM'  # 积分方程形式PCM
+pcm.eps = 78.4  # Dielectric constant of water
+pcm.method = 'IEFPCM'  # Integral-equation-formalism PCM
 
 # SCF with PCM
 mf = scf.RHF(mol)
 mf = pcm.run(mf)
 e_pcm = mf.e_tot
-print(f"PCM能量: {e_pcm:.6f} Ha")
+print(f"PCM energy: {e_pcm:.6f} Ha")
 
-# 溶剂化能
+# Solvation energy
 e_gas = scf.RHF(mol).kernel()
 G_sol = e_pcm - e_gas
-print(f"溶剂化能: {G_sol*27.2114:.2f} eV")
+print(f"Solvation energy: {G_sol*27.2114:.2f} eV")
 ```
 
-#### 不同溶剂
+#### Different Solvents
 ```python
-# 不同溶剂
+# Different solvents
 solvents = {
     'water': 78.4,
     'ethanol': 24.3,
@@ -1226,25 +1165,25 @@ for name, eps in solvents.items():
     print(f"{name:15s}: {mf_pcm.e_tot:.6f} Ha")
 ```
 
-### 2. SMD模型
+### 2. SMD Model
 
 #### SMD-SCF
 ```python
 # SMD (Solvation Model based on Density)
 pcm = solvent.PCM(mol)
 pcm.method = 'SMD'
-pcm.solvent = 'water'  # 溶剂名称
+pcm.solvent = 'water'  # Solvent name
 
 mf = scf.RHF(mol)
 mf = pcm.run(mf)
-print(f"SMD能量: {mf.e_tot:.6f} Ha")
+print(f"SMD energy: {mf.e_tot:.6f} Ha")
 ```
 
-### 3. 显式溶剂
+### 3. Explicit Solvent
 
-#### 微团簇模型
+#### Microcluster Model
 ```python
-# 水+6个水分子的微团簇
+# Microcluster consisting of water plus 6 water molecules
 cluster = gto.M(
     atom='''
     O  0.000000  0.000000  0.000000
@@ -1253,79 +1192,79 @@ cluster = gto.M(
     O  2.800000  0.000000  1.500000
     H  3.558602  0.000000  1.995716
     H  2.041398  0.000000  1.995716
-    ... (更多水分子)
+    ... (additional water molecules)
     ''',
     basis='cc-pvdz'
 )
 
 mf_cluster = scf.RHF(cluster)
 e_cluster = mf_cluster.kernel()
-print(f"团簇能量: {e_cluster:.6f} Ha")
+print(f"Cluster energy: {e_cluster:.6f} Ha")
 ```
 
-## 并行计算
+## Parallel Computation
 
-### 1. OpenMP并行
+### 1. OpenMP Parallelism
 
-#### 设置线程数
+#### Setting the Thread Count
 ```python
 import os
 
-# 设置OpenMP线程数
+# Set the OpenMP thread count
 os.environ['OMP_NUM_THREADS'] = '8'
 
-# 或使用PySCF设置
+# Or configure it through PySCF
 lib.num_threads(8)
 
-# SCF自动并行
+# SCF parallelizes automatically
 mf = scf.RHF(mol)
 e = mf.kernel()
-print(f"使用的线程数: {lib.num_threads()}")
+print(f"Number of threads used: {lib.num_threads()}")
 ```
 
-#### 性能分析
+#### Performance Analysis
 ```python
-# 启用计时
+# Enable timing
 lib.logger.TIMER_LEVEL = 3
 
 mf = scf.RHF(mol)
 e = mf.kernel()
 
-# 查看计时信息
-# 计时信息会输出到日志
+# Inspect timing information
+# Timing information is written to the log
 ```
 
-### 2. MPI并行
+### 2. MPI Parallelism
 
 #### MPI-SCF
 ```python
-# 需要使用mpi4py启动
+# Launch with mpi4py
 # mpirun -np 4 python script.py
 
 from pyscf import lib
 
-# 检查MPI
+# Check MPI
 if hasattr(lib, 'mpi'):
-    print(f"MPI进程数: {lib.mpi.rank} of {lib.mpi.size}")
+    print(f"MPI process: {lib.mpi.rank} of {lib.mpi.size}")
 else:
-    print("MPI未启用")
+    print("MPI is not enabled")
 
-# SCF自动并行
+# SCF parallelizes automatically
 mf = scf.RHF(mol)
 e = mf.kernel()
 ```
 
-## 参考文献和资源
+## References and Resources
 
-### PySCF文档
-1. PySCF官方文档: https://pyscf.org/
-2. PySCF示例: https://github.com/pyscf/pyscf/tree/master/examples
-3. PySCF API文档: https://pyscf.org/api.html
+### PySCF Documentation
+1. Official PySCF documentation: https://pyscf.org/
+2. PySCF examples: https://github.com/pyscf/pyscf/tree/master/examples
+3. PySCF API documentation: https://pyscf.org/api.html
 
-### 论文
+### Papers
 4. Sun et al., "Recent developments in the PySCF program package", WIREs Comput Mol Sci, 2020
 5. Sun et al., "PySCF: the Python-based simulations of chemistry framework", WIREs Comput Mol Sci, 2018
 
-### 教程和课程
+### Tutorials and Courses
 6. PySCF workshop: https://pyscf.org/workshop/
 7. Quantum chemistry with PySCF: https://pyscf.org/tutorial.html

@@ -1,19 +1,21 @@
 """
-PySCF DFT计算完整示例
-演示水分子DFT计算、激发态分析和性质计算
+Complete PySCF DFT example.
+
+Demonstrates a water-molecule DFT calculation, excited-state analysis, and
+selected molecular properties.
 """
 
 from pyscf import gto, dft, tdscf, lib
 import numpy as np
 
 def water_dft():
-    """水分子DFT计算"""
+    """Run the water-molecule DFT example."""
 
     print("="*60)
-    print("1. 分子定义")
+    print("1. Molecule definition")
     print("="*60)
 
-    # 定义水分子
+    # Define the water molecule.
     mol = gto.M(
         atom='''
         O  0.000000  0.000000  0.117790
@@ -27,14 +29,14 @@ def water_dft():
         symmetry='c2v'
     )
 
-    print(f"分子: {mol.atom[0][0]}{'H'*2}")
-    print(f"电子数: {mol.nelectron}")
-    print(f"AO数: {mol.nao}")
-    print(f"对称性: {mol.symmetry}")
+    print(f"Molecule: {mol.atom[0][0]}{'H'*2}")
+    print(f"Electrons: {mol.nelectron}")
+    print(f"Atomic orbitals: {mol.nao}")
+    print(f"Symmetry: {mol.symmetry}")
     print()
 
     print("="*60)
-    print("2. DFT计算 (B3LYP)")
+    print("2. DFT calculation (B3LYP)")
     print("="*60)
 
     # RKS-DFT
@@ -42,20 +44,20 @@ def water_dft():
     mf.xc = 'b3lyp'
     mf.grids.atom_grid = (75, 302)
 
-    # 运行SCF
+    # Run the SCF calculation.
     e_tot = mf.kernel()
 
-    print(f"\n基态能量: {e_tot:.10f} Hartree")
-    print(f"能量: {e_tot*27.2114:.6f} eV")
-    print(f"收敛: {mf.converged}")
+    print(f"\nGround-state energy: {e_tot:.10f} Hartree")
+    print(f"Energy: {e_tot*27.2114:.6f} eV")
+    print(f"Converged: {mf.converged}")
     print()
 
-    # 分子轨道分析
+    # Molecular-orbital analysis.
     print("="*60)
-    print("3. 分子轨道分析")
+    print("3. Molecular-orbital analysis")
     print("="*60)
 
-    # 轨道能量和占据数
+    # Orbital energies and occupations.
     mo_energy = mf.mo_energy
     mo_occ = mf.mo_occ
 
@@ -67,74 +69,76 @@ def water_dft():
     lumo_idx = np.where(mo_occ == 0)[0][0]
     lumo_energy = mo_energy[lumo_idx]
 
-    # 能隙
+    # Orbital-energy gap.
     gap = lumo_energy - homo_energy
 
-    print(f"HOMO能量: {homo_energy:.6f} Hartree ({homo_energy*27.2114:.3f} eV)")
-    print(f"LUMO能量: {lumo_energy:.6f} Hartree ({lumo_energy*27.2114:.3f} eV)")
-    print(f"能隙: {gap:.6f} Hartree ({gap*27.2114:.3f} eV)")
+    print(f"HOMO energy: {homo_energy:.6f} Hartree ({homo_energy*27.2114:.3f} eV)")
+    print(f"LUMO energy: {lumo_energy:.6f} Hartree ({lumo_energy*27.2114:.3f} eV)")
+    print(f"Orbital-energy gap: {gap:.6f} Hartree ({gap*27.2114:.3f} eV)")
     print()
 
-    # 占据轨道
-    print("占据轨道:")
+    # Occupied orbitals.
+    print("Occupied orbitals:")
     for i in range(mol.nao):
         if mo_occ[i] > 0:
             print(f"  MO {i+1:2d}: E = {mo_energy[i]:10.6f} Ha,  occ = {mo_occ[i]:.2f}")
     print()
 
-    # 虚轨道
-    print("虚轨道 (前5个):")
+    # Virtual orbitals.
+    print("Virtual orbitals (first five):")
     for i in range(lumo_idx, min(lumo_idx+5, mol.nao)):
         print(f"  MO {i+1:2d}: E = {mo_energy[i]:10.6f} Ha,  occ = {mo_occ[i]:.2f}")
     print()
 
     print("="*60)
-    print("4. LR-TDDFT激发态")
+    print("4. LR-TDDFT excited states")
     print("="*60)
 
-    # TDDFT计算
+    # TDDFT calculation.
     td = tdscf.TDDFT(mf)
     td.nstates = 6
     td.kernel()
+    oscillator_strengths = td.oscillator_strength()
 
-    # 分析激发态
-    print("\n激发态分析:")
-    print(f"{'态':<4} {'能量(eV)':<10} {'波长(nm)':<12} {'振子强度':<12}")
+    # Analyze the excited states.
+    print("\nExcited-state analysis:")
+    print(f"{'State':<6} {'Energy (eV)':<12} {'Wavelength (nm)':<16} {'Osc. strength':<14}")
     print("-"*60)
 
-    for i in range(td.nstates):
-        e_ev = td.e[i] * 27.2114
+    for i, excitation_energy in enumerate(td.e):
+        e_ev = excitation_energy * 27.2114
         wavelength = 1240.0 / e_ev
-        f = td.oscillator_strength[i]
+        f = oscillator_strengths[i]
         print(f"{i+1:<4} {e_ev:<10.3f} {wavelength:<12.2f} {f:<12.3f}")
     print()
 
-    # 最强激发态
-    strongest = np.argmax(td.oscillator_strength)
-    print(f"最强激发态: 第{strongest+1}激发态, 振子强度 = {td.oscillator_strength[strongest]:.3f}")
+    # Brightest computed excited state.
+    strongest = np.argmax(oscillator_strengths)
+    print(f"Brightest excited state: state {strongest+1}, oscillator strength = {oscillator_strengths[strongest]:.3f}")
     print()
 
     print("="*60)
-    print("5. NTO分析 (第1激发态)")
+    print("5. NTO analysis (first excited state)")
     print("="*60)
 
-    # 自然跃迁轨道
-    weights, nto = td.get_nto(state=0)
-    hole = nto[0]  # 空穴轨道
-    electron = nto[1]  # 电子轨道
+    # Natural transition orbitals.
+    weights, nto_coeff = td.get_nto(state=1)
+    nocc = np.count_nonzero(mf.mo_occ > 0)
+    occupied_ntos = nto_coeff[:, :nocc]
+    virtual_ntos = nto_coeff[:, nocc:]
 
-    print(f"主导跃迁权重: {weights.max():.6f}")
-    print(f"空穴轨道数: {hole.shape[1]}")
-    print(f"电子轨道数: {electron.shape[1]}")
+    print(f"Leading transition weight: {weights.max():.6f}")
+    print(f"Occupied NTOs: {occupied_ntos.shape[1]}")
+    print(f"Virtual NTOs: {virtual_ntos.shape[1]}")
     print()
 
     print("="*60)
-    print("6. 偶极矩")
+    print("6. Dipole moment")
     print("="*60)
 
-    # 电偶极矩
+    # Electric dipole moment.
     dip = mf.dip_moment(unit='Debye')
-    print(f"电偶极矩 (Debye):")
+    print("Electric dipole moment (Debye):")
     print(f"  μ_x = {dip[0]:.6f}")
     print(f"  μ_y = {dip[1]:.6f}")
     print(f"  μ_z = {dip[2]:.6f}")
@@ -142,21 +146,22 @@ def water_dft():
     print()
 
     print("="*60)
-    print("7. 电荷布居分析")
+    print("7. Charge-population analysis")
     print("="*60)
 
-    # Mulliken布居
-    pop = mf.mulliken_pop(mol, mf.make_rdm1())
+    # Mulliken population analysis. The second return value contains one
+    # atomic charge per atom; the first contains AO populations.
+    _, atomic_charges = mf.mulliken_pop(mol, mf.make_rdm1())
 
-    print("Mulliken布居:")
+    print("Mulliken atomic charges:")
     for i in range(mol.natm):
         atom = mol.atom_pure_symbol(i)
-        charge = pop[0][i]
+        charge = atomic_charges[i]
         print(f"  {atom}: {charge:.6f} e")
     print()
 
     print("="*60)
-    print("8. 不同泛函比较")
+    print("8. Functional comparison")
     print("="*60)
 
     functionals = ['pbe', 'b3lyp', 'wb97x-d', 'cam-b3lyp']
@@ -169,36 +174,36 @@ def water_dft():
         results[xc] = e_xc
         print(f"{xc:12s}: {e_xc:.10f} Hartree")
 
-    # 能量差
-    print("\n相对能量 (相对于PBE):")
+    # Energy differences.
+    print("\nRelative energies (with respect to PBE):")
     e_ref = results['pbe']
     for xc, e in results.items():
-        delta = (e - e_ref) * 27.2114 * 627.509  # 转换为kcal/mol
+        delta = (e - e_ref) * 627.509  # Hartree to kcal/mol.
         print(f"{xc:12s}: {delta:10.3f} kcal/mol")
     print()
 
     print("="*60)
-    print("9. 保存结果")
+    print("9. Save results")
     print("="*60)
 
-    # 保存到检查点
+    # Save a checkpoint.
     mf.chkfile = 'water_dft.chk'
-    mf.dump_chk()
+    mf.dump_chk(mf.chkfile)
 
-    print(f"检查点文件: {mf.chkfile}")
-    print(f"包含: MO系数、轨道能量、密度矩阵等")
+    print(f"Checkpoint file: {mf.chkfile}")
+    print("Contents include MO coefficients, orbital energies, and the density matrix.")
     print()
 
     return mf, td
 
 if __name__ == '__main__':
-    # 设置输出级别
+    # Set the output level.
     lib.logger.TIMER_LEVEL = 3
     lib.logger.INFO = True
 
-    # 运行计算
+    # Run the calculation.
     mf, td = water_dft()
 
     print("="*60)
-    print("计算完成!")
+    print("Calculation complete!")
     print("="*60)

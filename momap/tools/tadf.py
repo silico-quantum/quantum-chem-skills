@@ -4,15 +4,15 @@ momap-tadf — Full TADF photophysics pipeline using MOMAP.
 
 Given a directory of Gaussian S0/T1/S1 outputs, runs:
   1. EVC (S1→S0) → Duschinsky + HR for fluorescence
-  2. EVC (S1→T1) → Duschinsky + HR for ISC
-  3. spec_tvcf (S1→S0) → fluorescence spectrum
-  4. ISC rate (S1→T1) → k_ISC
-  5. Summary → Φ, τ, ΔE_ST, spectral peak in blue window
+  2. spec_tvcf (S1→S0) → fluorescence spectrum
+  3. Optional EVC + ISC rate (S1→T1) when an explicit Hso is supplied
+  4. Summary → ΔE_ST and spectral peak in the blue window
 """
 import sys
 import os
 import re
 import json
+import math
 import argparse
 import subprocess
 from pathlib import Path
@@ -20,22 +20,27 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 from extract import (
     extract_scf_energy,
-    extract_transition_dipoles,
+    extract_last_excitation_ev,
+    extract_s1_total_energy,
+    extract_state1_transition_endpoints,
     count_normal_terminations,
     generate_spec_tvcf_input,
 )
 from runner import (
     patch_momap_for_mpi3,
-    ensure_fchk,
+    stage_gaussian_inputs,
     create_nodefile,
     MOMAP_ROOT,
 )
 
 AU2DEBYE = 2.541746
 HA2EV = 27.2114
+_MOL_ID_PATTERN = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$')
 
 def run_momap_in_dir(inputfile, workdir):
     """Run patched MOMAP in workdir."""
+    workdir = Path(workdir).expanduser().resolve()
+    inputfile = Path(inputfile).expanduser().resolve(strict=True)
     patched = patch_momap_for_mpi3()
     create_nodefile(workdir)
     
@@ -43,7 +48,7 @@ def run_momap_in_dir(inputfile, workdir):
     env['MOMAP_ROOT'] = MOMAP_ROOT
     env['MOMAP_LICENSE'] = os.path.join(MOMAP_ROOT, 'license', 'hzwtech.lic')
     
-    cmd = ['python', patched, '-i', str(inputfile)]
+    cmd = [sys.executable, patched, '-i', str(inputfile)]
     print(f"  🚀 {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=str(workdir), env=env,
                           capture_output=False)
@@ -101,138 +106,207 @@ def parse_spec_output(spec_file):
     except Exception as e:
         return {'error': str(e)}
 
-def process_molecule(mol_id, s0_log, s1_log, t1_log, output_dir, temperature=300):
-    """Run full TADF MOMAP pipeline for one molecule."""
-    mol_dir = Path(output_dir) / mol_id
-    mol_dir.mkdir(parents=True, exist_ok=True)
-    
+def process_molecule(
+    mol_id,
+    s0_log,
+    s1_log,
+    t1_log,
+    output_dir,
+    temperature=300,
+    hso_cm1=None,
+):
+    """Run the TADF MOMAP pipeline for one molecule.
+
+    ISC is intentionally opt-in: ``hso_cm1`` must be supplied from a measured
+    or computed spin-orbit coupling. A missing value is reported as
+    ``not_computed`` and is never replaced by a numerical placeholder.
+    """
     results = {'mol_id': mol_id, 'success': False}
-    
-    # Step 0: Copy and validate input files
+    if not isinstance(mol_id, str) or not _MOL_ID_PATTERN.fullmatch(mol_id):
+        results['error'] = (
+            'mol_id must contain only letters, digits, dots, underscores, or '
+            'hyphens and must not contain a path'
+        )
+        return results
+
+    output_root = Path(output_dir).expanduser().resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    mol_dir = output_root / mol_id
+    mol_dir.mkdir(parents=True, exist_ok=True)
+
+    if hso_cm1 is not None:
+        try:
+            hso_cm1 = float(hso_cm1)
+        except (TypeError, ValueError):
+            results['error'] = 'hso_cm1 must be a finite positive number'
+            return results
+        if not math.isfinite(hso_cm1) or hso_cm1 <= 0:
+            results['error'] = 'hso_cm1 must be a finite positive number'
+            return results
+
     print(f"\n{'='*60}")
     print(f"🧬 Processing {mol_id}")
     print(f"{'='*60}")
-    
-    # Check files exist and have 2 Normal terminations
-    for label, path in [('S0', s0_log), ('S1', s1_log), ('T1', t1_log)]:
-        if path is None:
-            print(f"  ⚠️  {label}: no file provided")
-            continue
-        nts = count_normal_terminations(path)
-        print(f"  📄 {label}: {path} ({nts} Normal terminations)")
-        if nts < 2:
-            print(f"     ⚠️  Warning: expected 2 NTs (opt+freq), got {nts}")
-    
-    # Ensure fchk files
-    for log_path in [s0_log, s1_log, t1_log]:
-        if log_path:
-            ensure_fchk(log_path, mol_dir)
-    
-    # Extract parameters
+
+    source_logs = {'S0': s0_log, 'S1': s1_log, 'T1': t1_log}
+    staged_logs = {}
     try:
-        E_S0 = extract_scf_energy(s0_log)
-        E_S1 = extract_scf_energy(s1_log)
-        E_T1 = extract_scf_energy(t1_log) if t1_log else None
-    except Exception as e:
-        print(f"  ❌ SCF extraction failed: {e}")
+        for label, path in source_logs.items():
+            if path is None:
+                print(f"  ⚠️  {label}: no file provided")
+                continue
+            source = Path(path).expanduser().resolve(strict=True)
+            nts = count_normal_terminations(source)
+            print(f"  📄 {label}: {source} ({nts} Normal terminations)")
+            if nts < 2:
+                print(f"     ⚠️  Warning: expected 2 NTs (opt+freq), got {nts}")
+            staged_log, _ = stage_gaussian_inputs(
+                source, mol_dir, target_stem=label.lower()
+            )
+            staged_logs[label] = staged_log
+    except (OSError, ValueError) as exc:
+        results['error'] = f"Gaussian input staging failed: {exc}"
+        print(f"  ❌ {results['error']}")
         return results
-    
-    delta_EST = (E_S1 - E_T1) * HA2EV if E_T1 else None
-    
-    tdms = extract_transition_dipoles(s1_log)
-    EDMA_au = tdms[0]['DipS'] if tdms else 0.0
-    EDME_au = tdms[-1]['DipS'] if tdms else 0.0
-    
+
+    if 'S0' not in staged_logs or 'S1' not in staged_logs:
+        results['error'] = 'Both S0 and S1 Gaussian logs are required'
+        print(f"  ❌ {results['error']}")
+        return results
+
+    s0_staged = staged_logs['S0']
+    s1_staged = staged_logs['S1']
+    t1_staged = staged_logs.get('T1')
+
+    try:
+        E_S0 = extract_scf_energy(s0_staged)
+        E_S1_scf = extract_scf_energy(s1_staged)
+        E_exc_ev = extract_last_excitation_ev(s1_staged)
+        E_S1 = extract_s1_total_energy(s1_staged)
+        E_T1 = extract_scf_energy(t1_staged) if t1_staged else None
+        absorption, emission = extract_state1_transition_endpoints(s1_staged)
+    except (OSError, ValueError) as exc:
+        results['error'] = f"Gaussian parameter extraction failed: {exc}"
+        print(f"  ❌ {results['error']}")
+        return results
+
+    delta_EST = (E_S1 - E_T1) * HA2EV if E_T1 is not None else None
     results.update({
-        'E_S0': E_S0, 'E_S1': E_S1, 'E_T1': E_T1,
+        'E_S0': E_S0,
+        'E_S1': E_S1,
+        'E_S1_scf': E_S1_scf,
+        'E_exc_ev': E_exc_ev,
+        'E_T1': E_T1,
         'Ead_S1_S0': (E_S1 - E_S0) * HA2EV,
         'delta_EST_eV': delta_EST,
-        'EDMA': EDMA_au * AU2DEBYE,
-        'EDME': EDME_au * AU2DEBYE,
-        'f_abs': tdms[0]['Osc'] if tdms else 0.0,
-        'f_emi': tdms[-1]['Osc'] if tdms else 0.0,
+        'EDMA': absorption['magnitude_debye'],
+        'EDME': emission['magnitude_debye'],
+        'f_abs': absorption['Osc'],
+        'f_emi': emission['Osc'],
     })
 
     print(f"\n  📊 Extracted parameters:")
     print(f"     E(S0)   = {E_S0:.8f} au")
     print(f"     E(S1)   = {E_S1:.8f} au")
-    if E_T1:
+    if E_T1 is not None:
         print(f"     E(T1)   = {E_T1:.8f} au")
         print(f"     ΔE_ST   = {delta_EST:.4f} eV")
     print(f"     EDMA    = {results['EDMA']:.4f} debye")
     print(f"     EDME    = {results['EDME']:.4f} debye")
-    
-    # Step 1: EVC (S1→S0)
+
     print(f"\n  📐 Step 1: EVC (S1→S0)")
     evc_s1_input = mol_dir / 'momap_evc_s1.inp'
     with open(evc_s1_input, 'w') as f:
         f.write(f"""do_evc = 1
 
 &evc
-  ffreq(1) = "{os.path.basename(s0_log)}"
-  ffreq(2) = "{os.path.basename(s1_log)}"
+  ffreq(1) = "{s0_staged.name}"
+  ffreq(2) = "{s1_staged.name}"
   sort_mode = 1
 /
 """)
-    ok = run_momap_in_dir(evc_s1_input, mol_dir)
-    if not ok:
-        print(f"  ❌ EVC (S1→S0) failed")
+    if not run_momap_in_dir(evc_s1_input, mol_dir):
+        results['error'] = 'EVC (S1 to S0) failed'
+        print(f"  ❌ {results['error']}")
         return results
     evc_s1_info = parse_evc_out(mol_dir / 'evc.out')
     print(f"  ✅ {evc_s1_info['natoms']} atoms, {evc_s1_info['nmodes']} modes")
-    
-    # Step 2: spec_tvcf
+
     print(f"\n  🌈 Step 2: Spectrum (S1→S0)")
     spec_params = {
         'temperature': temperature,
-        'Ead': (E_S1 - E_S0),
+        'Ead': E_S1 - E_S0,
         'EDMA': results['EDMA'],
         'EDME': results['EDME'],
         'dsfile': 'evc.cart.dat',
     }
     spec_input = mol_dir / 'momap_spec.inp'
     generate_spec_tvcf_input(spec_params, spec_input)
-    ok = run_momap_in_dir(spec_input, mol_dir)
-    if ok:
+    if run_momap_in_dir(spec_input, mol_dir):
         spec_info = parse_spec_output(mol_dir / 'spec.tvcf.spec.dat')
         results['spectrum'] = spec_info
-        if spec_info.get('peak_wavelength'):
-            print(f"  ✅ Peak: {spec_info['peak_wavelength']:.1f} nm")
-            
-            # Blue window check
-            peak_nm = spec_info['peak_wavelength']
-            if 450 <= peak_nm <= 490:
-                print(f"  🔵 WITHIN BLUE WINDOW (450–490 nm)!")
-                results['blue_window'] = True
-            elif 400 <= peak_nm <= 500:
-                print(f"  🔹 Near blue window ({peak_nm:.0f} nm)")
-                results['blue_window'] = 'near'
-            else:
-                print(f"  ⚪ Outside blue window")
-                results['blue_window'] = False
-        
-        # FWHM
+        peak_nm = spec_info.get('peak_wavelength')
+        peak_intensity = spec_info.get('peak_intensity')
+        valid_peak = (
+            isinstance(peak_nm, (int, float))
+            and not isinstance(peak_nm, bool)
+            and math.isfinite(peak_nm)
+            and peak_nm > 0
+            and isinstance(peak_intensity, (int, float))
+            and not isinstance(peak_intensity, bool)
+            and math.isfinite(peak_intensity)
+            and peak_intensity > 0
+        )
+        if not valid_peak:
+            results['error'] = 'Spectrum output contains no valid positive-intensity peak'
+            print(f"  ❌ {results['error']}")
+            return results
+
+        print(f"  ✅ Peak: {peak_nm:.1f} nm")
+        if 450 <= peak_nm <= 490:
+            print("  🔵 WITHIN BLUE WINDOW (450–490 nm)!")
+            results['blue_window'] = True
+        elif 400 <= peak_nm <= 500:
+            print(f"  🔹 Near blue window ({peak_nm:.0f} nm)")
+            results['blue_window'] = 'near'
+        else:
+            print("  ⚪ Outside blue window")
+            results['blue_window'] = False
         if spec_info.get('top_peaks'):
             results['top_spectral_peaks'] = spec_info['top_peaks'][:3]
     else:
-        print(f"  ⚠️  Spectrum calculation had issues")
-    
-    # Step 3: isc_tvcf (phosphorescence + k_ISC) if T1 + Hso available
-    if t1_log and Path(t1_log).exists():
+        results['spectrum'] = {'status': 'failed'}
+        results['error'] = 'Spectrum calculation failed'
+        print(f"  ❌ {results['error']}")
+        return results
+
+    if t1_staged is None:
+        results['isc'] = {
+            'status': 'not_computed',
+            'reason': 'T1 Gaussian log not provided',
+        }
+    elif hso_cm1 is None:
+        results['isc'] = {
+            'status': 'not_computed',
+            'reason': 'hso_cm1 not provided',
+        }
+        print("\n  ⏭️  ISC not computed: hso_cm1 was not provided")
+    else:
         print(f"\n  🔀 Step 3: ISC TVCF (S1→T1 phosphorescence)")
         evc_isc_input = mol_dir / 'momap_evc_isc.inp'
         with open(evc_isc_input, 'w') as f:
             f.write(f"""do_evc = 1
 
 &evc
-  ffreq(1) = "{os.path.basename(s1_log)}"
-  ffreq(2) = "{os.path.basename(t1_log)}"
+  ffreq(1) = "{s1_staged.name}"
+  ffreq(2) = "{t1_staged.name}"
   sort_mode = 1
 /
 """)
-        ok = run_momap_in_dir(evc_isc_input, mol_dir)
-        if ok:
-            # Generate isc_tvcf input with placeholder Hso
+        if not run_momap_in_dir(evc_isc_input, mol_dir):
+            results['isc'] = {'status': 'failed', 'reason': 'EVC (S1 to T1) failed'}
+            print("  ❌ EVC (S1→T1) failed")
+        else:
             isc_input = mol_dir / 'momap_isc.inp'
             with open(isc_input, 'w') as f:
                 f.write(f"""do_isc_tvcf_ft   = 1
@@ -244,7 +318,7 @@ do_isc_tvcf_spec = 1
   tmax    = 5000 fs
   dt      = 0.001 fs
   Ead     = {abs(E_S1 - E_T1):.8f} au
-  Hso     = 1.0 cm-1
+  Hso     = {hso_cm1:.8g} cm-1
   DSFile  = "evc.cart.dat"
   Emax    = 0.3 au
   logFile = "isc.tvcf.log"
@@ -253,29 +327,37 @@ do_isc_tvcf_spec = 1
 /
 """)
             ok_isc = run_momap_in_dir(isc_input, mol_dir)
-            print(f"  {'✅' if ok_isc else '⚠️ '} ISC TVCF {'complete' if ok_isc else 'had issues'}")
-        else:
-            print(f"  ❌ EVC (S1→T1) failed")
-    
+            results['isc'] = {
+                'status': 'computed' if ok_isc else 'failed',
+                'hso_cm1': hso_cm1,
+            }
+            print(
+                f"  {'✅' if ok_isc else '⚠️ '} ISC TVCF "
+                f"{'complete' if ok_isc else 'had issues'}"
+            )
+
     results['success'] = True
     results['output_dir'] = str(mol_dir)
-    
-    # Summary
+
     print(f"\n  {'='*50}")
     print(f"  📋 {mol_id} Summary")
     print(f"  {'='*50}")
-    print(f"  ΔE_ST     = {delta_EST:.4f} eV" if delta_EST else "  ΔE_ST     = N/A")
+    print(
+        f"  ΔE_ST     = {delta_EST:.4f} eV"
+        if delta_EST is not None
+        else "  ΔE_ST     = N/A"
+    )
     if results.get('spectrum', {}).get('peak_wavelength'):
-        p = results['spectrum']
-        print(f"  λ_emi      = {p['peak_wavelength']:.1f} nm")
+        spectrum = results['spectrum']
+        print(f"  λ_emi      = {spectrum['peak_wavelength']:.1f} nm")
         blue = results.get('blue_window')
-        if blue == True:
-            print(f"  Blue Window = ✅ YES")
+        if blue is True:
+            print("  Blue Window = ✅ YES")
         elif blue == 'near':
-            print(f"  Blue Window = 🟡 NEAR")
+            print("  Blue Window = 🟡 NEAR")
         else:
-            print(f"  Blue Window = ❌ NO")
-    
+            print("  Blue Window = ❌ NO")
+
     return results
 
 
@@ -289,20 +371,40 @@ def main():
     parser.add_argument('--t1', help='T1 triplet state Gaussian log')
     parser.add_argument('--output', '-o', default='./momap_tadf_output', help='Output directory')
     parser.add_argument('--temperature', '-T', type=float, default=300, help='Temperature (K)')
-    parser.add_argument('--json', action='store_true', help='Output results as JSON')
+    parser.add_argument(
+        '--hso-cm1',
+        type=float,
+        help='Explicit S1-T1 spin-orbit coupling in cm^-1; omit to skip ISC',
+    )
+    parser.add_argument(
+        '--json-output',
+        help='Write machine-readable results to this JSON file',
+    )
     args = parser.parse_args()
 
-    results = process_molecule(
-        mol_id=args.mol_id,
-        s0_log=args.s0,
-        s1_log=args.s1,
-        t1_log=args.t1,
-        output_dir=args.output,
-        temperature=args.temperature,
-    )
+    try:
+        results = process_molecule(
+            mol_id=args.mol_id,
+            s0_log=args.s0,
+            s1_log=args.s1,
+            t1_log=args.t1,
+            output_dir=args.output,
+            temperature=args.temperature,
+            hso_cm1=args.hso_cm1,
+        )
+    except Exception as exc:
+        results = {
+            'mol_id': args.mol_id,
+            'success': False,
+            'error': f'Unexpected pipeline failure: {exc}',
+        }
 
-    if args.json:
-        print(json.dumps(results, indent=2, default=str))
+    if args.json_output:
+        json_output = Path(args.json_output).expanduser()
+        json_output.parent.mkdir(parents=True, exist_ok=True)
+        with open(json_output, 'w') as f:
+            json.dump(results, f, indent=2, default=str)
+            f.write('\n')
     
     if results.get('success'):
         return 0

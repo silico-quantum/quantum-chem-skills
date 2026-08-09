@@ -1,8 +1,8 @@
 {
   "name": "molecular-sampler",
   "version": "1.0.0",
-  "description": "Sample monomers and multi-molecule complexes from Gaussian ONIOM or XYZ files",
-  "main": "molecular_sampler.py",
+  "private": true,
+  "description": "Optional npm command shim for the Python molecular sampler",
   "scripts": {
     "sample": "python3 molecular_sampler.py"
   },
@@ -14,8 +14,5 @@
     "oniom"
   ],
   "author": "Silico",
-  "license": "MIT",
-  "dependencies": {
-    "python": ">=3.7"
-  }
+  "license": "MIT"
 }

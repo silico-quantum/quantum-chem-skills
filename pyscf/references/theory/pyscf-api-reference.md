@@ -1,65 +1,65 @@
-# PySCF API详细参考
+# Detailed PySCF API Reference
 
-## 模块导入
+## Module Imports
 
 ```python
-from pyscf import gto      # 基组和分子定义
-from pyscf import scf      # SCF方法
-from pyscf import dft      # DFT方法
-from pyscf import mp       # 微扰理论（MP2等）
-from pyscf import cc       # 耦合簇（CCSD等）
-from pyscf import mcscf    # 多组态SCF
-from pyscf import fci      # 全CI
-from pyscf import tdscf    # 含时SCF（TDDFT）
-from pyscf import ao2mo    # AO到MO积分变换
-from pyscf import df       # 密度拟合
-from pyscf import grad     # 能量梯度
-from pyscf import geomopt  # 几何优化
-from pyscf import solvent  # 溶剂效应
-from pyscf.pbc import gto as pbcgto  # 周期体系GTO
-from pyscf.pbc import scf as pbcscf  # 周期体系SCF
-from pyscf.pbc import dft as pbcdft  # 周期体系DFT
+from pyscf import gto      # Basis-set and molecular definitions
+from pyscf import scf      # SCF methods
+from pyscf import dft      # DFT methods
+from pyscf import mp       # Perturbation theory (MP2, etc.)
+from pyscf import cc       # Coupled cluster (CCSD, etc.)
+from pyscf import mcscf    # Multiconfigurational SCF
+from pyscf import fci      # Full CI
+from pyscf import tdscf    # Time-dependent SCF (TDDFT)
+from pyscf import ao2mo    # AO-to-MO integral transformation
+from pyscf import df       # Density fitting
+from pyscf import grad     # Energy gradients
+from pyscf import geomopt  # Geometry optimization
+from pyscf import solvent  # Solvent effects
+from pyscf.pbc import gto as pbcgto  # GTOs for periodic systems
+from pyscf.pbc import scf as pbcscf  # SCF for periodic systems
+from pyscf.pbc import dft as pbcdft  # DFT for periodic systems
 ```
 
-## gto模块 - 分子和基组
+## `gto` Module: Molecules and Basis Sets
 
-### M类 - 分子/晶胞对象
+### `M` Class: Molecule/Cell Objects
 
-#### 构造函数
+#### Constructor
 ```python
 mol = gto.M(
-    atom=None,              # 原子坐标
-    basis=None,             # 基组
-    spin=0,                 # 自旋多重度2S
-    charge=0,                # 总电荷
-    symmetry=False,         # 对称性
-    unit='Ang',             # 坐标单位（'Ang'或'Bohr'）
-    parse_arg=False,        # 是否解析参数
-    verbose=4,              # 输出级别
+    atom=None,              # Atomic coordinates
+    basis=None,             # Basis set
+    spin=0,                 # Spin, 2S
+    charge=0,               # Total charge
+    symmetry=False,         # Symmetry
+    unit='Ang',             # Coordinate unit ('Ang' or 'Bohr')
+    parse_arg=False,        # Whether to parse arguments
+    verbose=4,              # Output verbosity
 )
 ```
 
-#### 常用属性
+#### Common Attributes
 ```python
-mol.atom          # 原子列表
-mol.natm          # 原子数
-mol.nel           # 电子数
-mol.nao           # AO数
-mol.nelectron     # 电子数
-mol.spin          # 自旋2S
-mol.charge        # 电荷
-mol.basis         # 基组名
-mol.symmetry      # 对称性
-mol.irrep_id      # 不可约表示ID
-mol.symm_orb      # 对称轨道
-mol.cart          # 是否使用笛卡尔高斯
+mol.atom          # Atom list
+mol.natm          # Number of atoms
+mol.nel           # Number of electrons
+mol.nao           # Number of AOs
+mol.nelectron     # Number of electrons
+mol.spin          # Spin, 2S
+mol.charge        # Charge
+mol.basis         # Basis-set name
+mol.symmetry      # Symmetry
+mol.irrep_id      # Irreducible-representation IDs
+mol.symm_orb      # Symmetry-adapted orbitals
+mol.cart          # Whether Cartesian Gaussian functions are used
 ```
 
-#### 常用方法
+#### Common Methods
 
-**分子几何**
+**Molecular Geometry**
 ```python
-# 内坐标格式
+# Cartesian-coordinate format
 mol = gto.M(
     atom='''
     O  0.0  0.0  0.0
@@ -69,7 +69,7 @@ mol = gto.M(
     basis='cc-pvdz'
 )
 
-# Z矩阵格式
+# Z-matrix format
 mol = gto.M(
     atom='''
     O
@@ -79,16 +79,16 @@ mol = gto.M(
     basis='cc-pvdz'
 )
 
-# 从XYZ文件读取
+# Read from an XYZ file
 mol = gto.M(atom='h2o.xyz', basis='cc-pvdz')
 ```
 
-**基组设置**
+**Basis-Set Configuration**
 ```python
-# 使用内置基组
+# Use a built-in basis set
 mol = gto.M(atom='...', basis='cc-pvdz')
 
-# 自定义基组
+# Define a custom basis set
 mol = gto.M(
     atom='...',
     basis={
@@ -102,197 +102,197 @@ mol = gto.M(
     }
 )
 
-# 混合基组
+# Mix basis sets
 mol = gto.M(
     atom='O 0 0 0; H 0 1 0; H 0 0 1',
     basis={'O': 'cc-pvdz', 'H': 'cc-pvsz'}
 )
 ```
 
-**对称性**
+**Symmetry**
 ```python
-# 启用对称性
+# Enable symmetry
 mol = gto.M(atom='...', symmetry=True)
 
-# 指定点群
+# Specify a point group
 mol = gto.M(atom='...', symmetry='d2h')
 
-# 可用点群：'d2h', 'c2v', 'c2h', 'd2', 'ci', 'cs', 'c1'
+# Available point groups: 'd2h', 'c2v', 'c2h', 'd2', 'ci', 'cs', 'c1'
 ```
 
-**积分计算**
+**Integral Evaluation**
 ```python
-# 重叠矩阵
+# Overlap matrix
 S = mol.intor('int1e_ovlp')
 
-# 动能矩阵
+# Kinetic-energy matrix
 T = mol.intor('int1e_kin')
 
-# 核吸引矩阵
+# Nuclear-attraction matrix
 V = mol.intor('int1e_nuc')
 
-# 核-核排斥能
+# Nuclear-repulsion energy
 Vnn = mol.energy_nuc()
 
-# 双电子积分（8重对称）
+# Two-electron integrals (eightfold symmetry)
 eri = mol.intor('int2e')
 
-# 双电子积分（4重对称）
+# Two-electron integrals (fourfold symmetry)
 eri_4 = mol.intor('int2e_sph', aosym=4)
 ```
 
-**晶胞（PBC）**
+**Periodic Cell (PBC)**
 ```python
 from pyscf.pbc import gto as pbcgto
 
 cell = pbcgto.M(
     atom='...',
     basis='gth-szv',
-    a=[[3.5, 0, 0], [0, 3.5, 0], [0, 0, 3.5]],  # 晶格向量
-    pseudo='gth-pade',  # 赝势
-    ke_cutoff=100,       # 动能截断
+    a=[[3.5, 0, 0], [0, 3.5, 0], [0, 0, 3.5]],  # Lattice vectors
+    pseudo='gth-pade',  # Pseudopotential
+    ke_cutoff=100,      # Kinetic-energy cutoff
 )
 
-# k点采样
+# k-point sampling
 kpts = cell.make_kpts([2, 2, 2])
 ```
 
-## scf模块 - SCF方法
+## `scf` Module: SCF Methods
 
-### SCF基类
+### SCF Base Classes
 
-#### 常用类
+#### Common Classes
 ```python
-from pyscf import scf
+from pyscf import dft, scf
 
-# 闭壳层
-mf = scf.RHF(mol)  # 限制性HF
-mf = scf.UHF(mol)  # 非限制性HF
-mf = scf.ROHF(mol) # 限制性开壳层HF
+# Hartree-Fock methods
+mf = scf.RHF(mol)  # Restricted HF
+mf = scf.UHF(mol)  # Unrestricted HF
+mf = scf.ROHF(mol) # Restricted open-shell HF
 
-# 自由基
-mf = scf.RKS(mol)  # 限制性KS-DFT
-mf = scf.UKS(mol)  # 非限制性KS-DFT
+# Kohn-Sham DFT methods
+mf = dft.RKS(mol)  # Restricted KS-DFT
+mf = dft.UKS(mol)  # Unrestricted KS-DFT
 ```
 
-#### 核心属性
+#### Core Attributes
 ```python
-mf.mol           # 分子对象
-mf.mo_coeff      # MO系数 (nao, nmo)
-mf.mo_energy     # MO轨道能量
-mf.mo_occ        # MO占据数
-mf.e_tot         # 总能量
-mf.converged     # 是否收敛
-mf.scf_summary   # SCF总结字典
-mf.chkfile       # 检查点文件
+mf.mol           # Molecule object
+mf.mo_coeff      # MO coefficients (nao, nmo)
+mf.mo_energy     # MO energies
+mf.mo_occ        # MO occupations
+mf.e_tot         # Total energy
+mf.converged     # Convergence status
+mf.scf_summary   # SCF summary dictionary
+mf.chkfile       # Checkpoint file
 ```
 
-#### 核心方法
+#### Core Methods
 
-**运行SCF**
+**Run SCF**
 ```python
-# 标准运行
+# Standard run
 mf.kernel()
-mf.kernel(dm0=None)  # 指定初始密度矩阵
+mf.kernel(dm0=None)  # Specify an initial density matrix
 
-# 返回能量和收敛标志
+# Return the energy and inspect the convergence flag
 e_conv = mf.kernel()
-print(f'能量: {e_conv:.6f}')
-print(f'收敛: {mf.converged}')
+print(f'Energy: {e_conv:.6f}')
+print(f'Converged: {mf.converged}')
 ```
 
-**密度矩阵**
+**Density Matrices**
 ```python
-# 总密度矩阵
+# Total density matrix
 dm = mf.make_rdm1()
 
-# α和β密度矩阵（开壳层）
+# Alpha and beta density matrices (open-shell)
 dma, dmb = mf.make_rdm1()
 ```
 
-**Fock矩阵**
+**Fock Matrices**
 ```python
-# 有效Fock矩阵
+# Effective Fock matrix
 fock = mf.get_fock()
 
-# AO基Fock矩阵
+# Fock matrix in the AO basis
 fock_ao = mf.get_fock(dm=mf.make_rdm1())
 ```
 
-**轨道分析**
+**Orbital Analysis**
 ```python
-# HOMO能量
+# HOMO energy
 homo_idx = np.where(mf.mo_occ > 0)[0][-1]
 homo_energy = mf.mo_energy[homo_idx]
 
-# LUMO能量
+# LUMO energy
 lumo_idx = np.where(mf.mo_occ == 0)[0][0]
 lumo_energy = mf.mo_energy[lumo_idx]
 
-# 能隙
+# Energy gap
 gap = lumo_energy - homo_energy
 ```
 
-#### SCF控制
+#### SCF Control
 
-**初始猜测**
+**Initial Guess**
 ```python
-# 核哈密顿量
+# Core Hamiltonian
 mf.init_guess = '1e'
 
-# Hückel方法
+# Hückel method
 mf.init_guess = 'huckel'
 
-# 从检查点读取
+# Read from a checkpoint
 mf.init_guess = 'chkfile'
 mf.chkfile = 'previous.chk'
 
-# 从密度矩阵开始
+# Start from a density matrix
 dm_guess = mf.get_init_guess()
 mf.kernel(dm0=dm_guess)
 ```
 
-**收敛加速**
+**Convergence Acceleration**
 ```python
 # DIIS
-mf.diis_start_cycle = 3  # DIIS开始周期
+mf.diis_start_cycle = 3  # DIIS starting cycle
 mf.diis = True
 
-# 阻尼
-mf.damp_factor = 0.2  # 阻尼因子
+# Damping
+mf.damp_factor = 0.2  # Damping factor
 
-# 水平位移
-mf.level_shift = 0.5  # 虚轨道位移
+# Level shift
+mf.level_shift = 0.5  # Virtual-orbital shift
 
-# 最大迭代
+# Maximum number of iterations
 mf.max_cycle = 100
 
-# 收敛阈值
-mf.conv_tol = 1e-8  # 能量阈值
-mf.conv_tol_grad = 1e-5  # 梯度阈值
+# Convergence thresholds
+mf.conv_tol = 1e-8  # Energy threshold
+mf.conv_tol_grad = 1e-5  # Gradient threshold
 ```
 
-**保存/读取**
+**Save/Load**
 ```python
-# 保存到检查点
+# Save to a checkpoint
 mf.chkfile = 'calc.chk'
-mf.dump_chk()  # 手动保存
+mf.dump_chk(mf.chkfile)  # Save the current SCF object manually
 
-# 从检查点读取
+# Read from a checkpoint
 mf = scf.RHF(mol)
 mf.chkfile = 'calc.chk'
-mf.kernel()  # 自动读取
+mf.kernel()  # Read automatically
 
-# 仅读取密度
+# Read only the density
 mf_chk = scf.RHF(mol)
 dm = mf_chk.from_chk('calc.chk')
 ```
 
-## dft模块 - DFT方法
+## `dft` Module: DFT Methods
 
-### RKS/UKS类
+### RKS/UKS Classes
 
-#### 基本用法
+#### Basic Usage
 ```python
 from pyscf import dft
 
@@ -301,9 +301,9 @@ mf.xc = 'b3lyp'
 mf.kernel()
 ```
 
-#### 泛函设置
+#### Functional Configuration
 
-**内置泛函**
+**Built-In Functionals**
 ```python
 # LDA
 mf.xc = 'svwn'
@@ -320,73 +320,75 @@ mf.xc = 'tpss'
 mf.xc = 'm06-l'
 mf.xc = 'scan'
 
-# 杂化泛函
+# Hybrid functionals
 mf.xc = 'b3lyp'
 mf.xc = 'pbe0'
 mf.xc = 'wb97x-d'
 mf.xc = 'm06-2x'
 
-# 范围分离泛函
+# Range-separated functionals
 mf.xc = 'cam-b3lyp'
 mf.xc = 'wb97x'
 mf.xc = 'lc-wpbe'
 ```
 
-**自定义泛函**
+**Custom Functionals**
 ```python
-# 方程式定义
+# Expression-based definition
 mf.xc = '.2*HF + .08*LDA + .72*B88, .81*LYP + .19*VWN'
 
-# 完全自定义函数
+# Fully custom function
 def my_xc(rho, spin=0, deriv=1, **kwargs):
     # rho: (N, 4) array [density, grad_x, grad_y, grad_z]
-    # 返回: (ex+vc, vrho, vgamma)
-    e_xc = ...  # 交换相关能密度
-    vrho = ...  # 密度势
-    vgamma = ...  # 梯度势
+    # Return: (ex+vc, vrho, vgamma)
+    e_xc = ...  # Exchange-correlation energy density
+    vrho = ...  # Density potential
+    vgamma = ...  # Gradient potential
     return e_xc, vrho, vgamma
 
 mf._numint._xc = my_xc
 ```
 
-#### 网格设置
+#### Grid Configuration
 
-**原子网格**
+**Atomic Grid**
 ```python
-# (角度网格点数, 径向网格点数)
-mf.grids.atom_grid = (75, 302)  # 标准
-mf.grids.atom_grid = (99, 590)  # 精细
-mf.grids.atom_grid = (250, 974) # 超精细
+# (number of angular grid points, number of radial grid points)
+mf.grids.atom_grid = (75, 302)  # Standard
+mf.grids.atom_grid = (99, 590)  # Fine
+mf.grids.atom_grid = (250, 974) # Ultrafine
 
-# 是否修剪
-mf.grids.prune = None  # 不修剪
-mf.grids.prune = dft.gen_grid.sg1_prune  # SG1修剪
+# Grid pruning
+mf.grids.prune = None  # No pruning
+mf.grids.prune = dft.gen_grid.sg1_prune  # SG1 pruning
 ```
 
-**密度拟合网格**
+**Nonlocal-Correlation Grid**
 ```python
-# 用于非局部色散
-mf.nlc = 'vv10'  # 或 'rvv10'
+# Used for nonlocal dispersion
+mf.nlc = 'vv10'  # Or 'rvv10'
 mf.nlcgrids.atom_grid = (50, 194)
 ```
 
-#### 分子积分
+#### Molecular Integrals
 
-**交换相关势**
+**Effective Potential and Coulomb/Exchange Matrices**
 ```python
-# 交换相关势矩阵
-vxc = mf.get_veff(mol, mf.make_rdm1())
+# Effective potential used by the Kohn-Sham build. It includes Coulomb and
+# exchange-correlation contributions and, for hybrids, exact exchange.
+veff = mf.get_veff(mol, mf.make_rdm1())
 
-# 分解
-vx = mf.get_j(mol, mf.make_rdm1())  # 交换
-vc = mf.get_k(mol, mf.make_rdm1())  # 相关
+# Coulomb and exact-exchange matrix builders; these are not an
+# exchange-correlation decomposition of veff.
+vj = mf.get_j(mol, mf.make_rdm1())  # Coulomb matrix
+vk = mf.get_k(mol, mf.make_rdm1())  # Exchange matrix
 ```
 
-## tdscf模块 - 含时SCF
+## `tdscf` Module: Time-Dependent SCF
 
-### TDDFT类
+### TDDFT Class
 
-#### 基本用法
+#### Basic Usage
 ```python
 from pyscf import tdscf
 
@@ -395,390 +397,387 @@ td = tdscf.TDDFT(mf)
 td.nstates = 6
 td.kernel()
 
-# TDA近似
+# TDA approximation
 td_tda = tdscf.TDA(mf)
 td_tda.nstates = 4
 td_tda.kernel()
 ```
 
-#### 核心属性
+#### Core Attributes
 ```python
-td.nstates         # 激发态数
-td.e              # 激发能 (Hartree)
-td.oscillator_strength  # 振子强度
-td.vectors        # 跃迁向量
-td.mf             # 基态SCF对象
+td.nstates         # Number of excited states
+td.converged       # Convergence status for the requested states
+td.e               # Excitation energies (Hartree)
+td.xy              # Excitation/de-excitation amplitudes
 ```
 
-#### 提取激发态信息
+#### Extract Excited-State Information
 
 ```python
-# 激发能（eV）
+# Excitation energies (eV)
 for i, e in enumerate(td.e):
-    print(f'态{i+1}: {e*27.2114:.2f} eV')
+    print(f'State {i+1}: {e*27.2114:.2f} eV')
 
-# 波长（nm）
+# Wavelengths (nm)
 for i, e in enumerate(td.e):
     wavelength = 1240/(e*27.2114)
-    print(f'态{i+1}: {wavelength:.1f} nm')
+    print(f'State {i+1}: {wavelength:.1f} nm')
 
-# 振子强度
-for i, f in enumerate(td.oscillator_strength):
-    print(f'态{i+1}: f = {f:.3f}')
+# Oscillator strengths
+oscillator_strengths = td.oscillator_strength()
+for i, f in enumerate(oscillator_strengths):
+    print(f'State {i+1}: f = {f:.3f}')
 
-# 跃迁性质
-for i in range(td.nstates):
-    xy = td.transition_dipole[i]  # 跃迁偶极矩
-    print(f'态{i+1}: μ = {xy}')
+# Transition dipole moments
+transition_dipoles = td.transition_dipole()
+for i, transition_dipole in enumerate(transition_dipoles):
+    print(f'State {i+1}: μ = {transition_dipole}')
 ```
 
-#### NTO分析
+#### NTO Analysis
 
 ```python
-# 自然跃迁轨道
-weights, nto = td.get_nto(state=0)
+# Natural transition orbitals
+weights, nto_coeff = td.get_nto(state=1)
 
-# 空穴轨道（初始态）
-hole = nto[0]  # (nao, nocc)
+# For a restricted reference, occupied NTOs precede virtual NTOs.
+nocc = np.count_nonzero(mf.mo_occ > 0)
+occupied_ntos = nto_coeff[:, :nocc]
+virtual_ntos = nto_coeff[:, nocc:]
 
-# 电子轨道（终态）
-electron = nto[1]  # (nao, nvirt)
-
-# 主导跃迁权重
+# Dominant occupied-virtual NTO-pair weight
 dominant_weight = weights.max()
-print(f'主导权重: {dominant_weight:.3f}')
+print(f'Dominant weight: {dominant_weight:.3f}')
 ```
 
-#### 态平均
+#### State Averaging
 
 ```python
-# 态平均TDDFT
+# State-averaged TDDFT
 td = tdscf.TDDFT(mf)
 td.state_average = True
 td.nstates = 5
 td.kernel()
 ```
 
-## mcscf模块 - 多组态SCF
+## `mcscf` Module: Multiconfigurational SCF
 
-### CASSCF类
+### CASSCF Class
 
-#### 基本用法
+#### Basic Usage
 ```python
 from pyscf import mcscf
 
-# CAS(nele, norb): 电子数, 轨道数
+# CAS(nele, norb): number of electrons, number of orbitals
 cas = mcscf.CASSCF(mf, 6, 8)
 e_cas, ci_vec, mo, mo_occ = cas.kernel()
 ```
 
-#### 核心属性
+#### Core Attributes
 ```python
-cas.ncas           # 活性轨道数
-cas.nelecas        # 活性电子数
-cas.mo_coeff       # 优化后的MO系数
-cas.ci             # CI向量
-cas.e_cas          # CASSCF能量
-cas.frozen         # 冻结轨道数
+cas.ncas           # Number of active orbitals
+cas.nelecas        # Number of active electrons
+cas.mo_coeff       # Optimized MO coefficients
+cas.ci             # CI vector
+cas.e_cas          # CASSCF energy
+cas.frozen         # Number of frozen orbitals
 ```
 
-#### 初始轨道选择
+#### Initial-Orbital Selection
 
 ```python
-# 自动选择（HOMO/LUMO附近）
+# Automatic selection (near the HOMO/LUMO)
 cas = mcscf.CASSCF(mf, 6, 8)
 
-# 手动指定
+# Manual specification
 cas = mcscf.CASSCF(mf, 6, 8)
-cas.mo_coeff = mf.mo_coeff  # 从SCF开始
+cas.mo_coeff = mf.mo_coeff  # Start from SCF orbitals
 
-# 自然轨道（推荐）
+# Natural orbitals (recommended)
 no_coeff, no_occ = mcscf.cas_natorb(cas)
 cas.mo_coeff = no_coeff
 ```
 
-#### 态平均
+#### State Averaging
 
 ```python
-# 态平均CASSCF
+# State-averaged CASSCF
 cas = mcscf.CASSCF(mf, 6, 8)
-cas.state_average([0.5, 0.3, 0.2])  # 3个态，权重0.5/0.3/0.2
+cas.state_average([0.5, 0.3, 0.2])  # Three states with weights 0.5/0.3/0.2
 cas.kernel()
 ```
 
-#### 激发态
+#### Excited States
 
 ```python
-# 态特定CASSCF
+# State-specific CASSCF
 cas = mcscf.CASSCF(mf, 6, 8)
-cas.state_specific(2)  # 第3激发态
+cas.state_specific(2)  # Third excited state
 cas.kernel()
 ```
 
-#### 密度拟合CASSCF
+#### Density-Fitted CASSCF
 
 ```python
-# 密度拟合加速
+# Density-fitting acceleration
 cas_df = mcscf.DFCASSCF(mf, 6, 8, auxbasis='cc-pvtz-jkfit')
 cas_df.kernel()
 ```
 
-## grad模块 - 能量梯度
+## `grad` Module: Energy Gradients
 
-### 梯度方法
+### Gradient Methods
 
-#### HF/DFT梯度
+#### HF/DFT Gradients
 
 ```python
 from pyscf import grad
 
-# 获取梯度方法
+# Get the gradient method
 g = mf.nuc_grad_method()
 grad = g.kernel()  # (natm, 3)
 
-# 打印梯度
-print('能量梯度:')
+# Print the gradient
+print('Energy gradient:')
 for i in range(mol.natm):
     atom = mol.atom_symbol(i)
     print(f'{atom}: {grad[i]}')
 ```
 
-#### CASSCF梯度
+#### CASSCF Gradients
 
 ```python
-# CASSCF梯度
+# CASSCF gradient
 g = cas.nuc_grad_method()
 grad = g.kernel()
 ```
 
-#### 梯度优化
+#### Gradient-Based Optimization
 
 ```python
-# 使用梯度进行几何优化
+# Use gradients for geometry optimization
 scanner = mf.as_scanner()
 optimizer = scanner.nuc_grad_method().optimizer()
 optimized_mol = optimizer.kernel()
 ```
 
-## ao2mo模块 - 积分变换
+## `ao2mo` Module: Integral Transformation
 
-### AO到MO变换
+### AO-to-MO Transformation
 
 ```python
 from pyscf import ao2mo
 
-# 完全变换
+# Full transformation
 eri_mo = ao2mo.incore.full(eri_ao, mo_coeff)
 
-# 部分变换（节省内存）
+# Partial transformation (saves memory)
 eri_mo = ao2mo.incore.general(eri_ao, [mo_occ, mo_occ, mo_occ, mo_occ])
 
-# 外存变换（大分子）
+# Out-of-core transformation (large molecules)
 ao2mo.outcore.full(mol, mo_coeff, 'eri_mo.h5')
 ```
 
-## df模块 - 密度拟合
+## `df` Module: Density Fitting
 
-### 密度拟合SCF
+### Density-Fitted SCF
 
 ```python
 from pyscf import df
 
-# 自动密度拟合
+# Automatic density fitting
 mf_df = mf.density_fit(auxbasis='def2-universal-jfit')
 
-# 手动密度拟合
+# Manual density fitting
 mf_df = df.density_fit(scf.RHF(mol), auxbasis='cc-pvtz-jkfit')
 
-# 常用拟合基组
-auxbasis = 'def2-universal-jfit'  # 通用拟合基
-auxbasis = 'cc-pvtz-jkfit'       # JK拟合基
-auxbasis = 'cc-pvtz-ri'          # RI拟合基
+# Common auxiliary basis sets
+auxbasis = 'def2-universal-jfit'  # General-purpose auxiliary basis
+auxbasis = 'cc-pvtz-jkfit'       # JK-fitting basis
+auxbasis = 'cc-pvtz-ri'          # RI-fitting basis
 ```
 
-## 工具函数
+## Utility Functions
 
-### 坐标操作
+### Coordinate and File Operations
 
 ```python
 from pyscf.tools import cubegen, molden
 
-# 立方体文件（用于可视化）
+# Cube files (for visualization)
 cubegen.orbital(mol, 'h2o_homo.cube',
                 mo_coeff[:, mo_occ>0][:, -1])
 cubegen.density(mol, 'h2o_density.cube',
                 mf.make_rdm1())
 
-# Molden文件（轨道可视化）
+# Molden file (orbital visualization)
 molden.from_mo(mol, 'h2o.molden', mf.mo_coeff)
 ```
 
-### 布居分析
+### Population Analysis
 
 ```python
 from pyscf import lo
 
-# Mulliken布居
+# Mulliken population
 pop = mf.mulliken_pop(mol, mf.make_rdm1())
 
-# Lowdin布居
+# Löwdin population
 pop = lo.vec_lowdin(mf.mo_coeff, mf.get_ovlp())
 
-# 自然布居分析（NPA）
-# 需要外部工具或手动实现
+# Natural population analysis (NPA)
+# Requires an external tool or a manual implementation
 ```
 
-## 并行计算
+## Parallel Computing
 
-### OMP并行
+### OpenMP Parallelism
 
 ```python
 import os
 
-# 设置线程数
+# Set the number of threads
 os.environ['OMP_NUM_THREADS'] = '8'
 
-# 自动并行
+# Run with automatic parallelism
 mf.kernel()
 ```
 
-### MPI并行
+### MPI Parallelism
 
 ```python
-# 通过mpi4py运行
+# Run through mpi4py
 # mpirun -np 4 python script.py
 
 from pyscf import lib
 
-# 检查MPI
-print(lib.num_threads())  # 线程数
-print(lib.nproc)          # 进程数（如果使用MPI）
+# Inspect MPI settings
+print(lib.num_threads())  # Number of threads
+print(lib.nproc)          # Number of processes (when using MPI)
 ```
 
-## 常见错误处理
+## Common Troubleshooting
 
-### SCF不收敛
+### SCF Does Not Converge
 
 ```python
-# 检查收敛信息
+# Inspect convergence information
 print(mf.converged)
 print(mf.scf_summary)
 
-# 常见修复方法
-mf.init_guess = 'huckel'    # 更好的初始猜测
-mf.diis_start_cycle = 5    # 延迟DIIS
-mf.level_shift = 0.5        # 水平位移
-mf.damp_factor = 0.2       # 阻尼
+# Common remedies
+mf.init_guess = 'huckel'   # Use a better initial guess
+mf.diis_start_cycle = 5    # Delay DIIS
+mf.level_shift = 0.5       # Apply a level shift
+mf.damp_factor = 0.2       # Apply damping
 
-# Newton-Raphson方法
+# Newton-Raphson method
 mf_newton = mf.newton()
 mf_newton.kernel()
 ```
 
-### 内存不足
+### Insufficient Memory
 
 ```python
-# 密度拟合
+# Density fitting
 mf = mf.density_fit()
 
-# 外存计算
+# Out-of-core calculation
 mf.direct_scf = False
 mf.chkfile = 'calc.chk'
 
-# 减小网格
+# Reduce the grid size
 mf.grids.atom_grid = (75, 302)
 ```
 
-### 激发态问题
+### Excited-State Problems
 
 ```python
-# 先用TDA
+# Try TDA first
 td_tda = tdscf.TDA(mf)
 
-# 检查基态质量
-print(f'能隙: {gap*27.2114:.2f} eV')
+# Check the quality of the ground state
+print(f'Gap: {gap*27.2114:.2f} eV')
 
-# 增加网格精度
+# Increase grid accuracy
 mf.grids.atom_grid = (99, 590)
 ```
 
-## 检查点文件
+## Checkpoint Files
 
-### 保存所有数据
+### Save All Data
 
 ```python
-# 自动保存
+# Save automatically
 mf.chkfile = 'calculation.chk'
 mf.kernel()
 
-# 手动保存
-mf.dump_chk(mf.chkfile, mf.mo_coeff, mf.mo_energy,
-            mf.mo_occ, mf.e_tot)
+# Save manually
+mf.dump_chk(mf.chkfile)
 ```
 
-### 从检查点读取
+### Read from a Checkpoint
 
 ```python
-# 读取分子
-mol_chk = scf.chkfile.load('calculation.chk', 'mol')
+# Read the molecule and saved SCF record.
+mol_chk, scf_data = scf.chkfile.load_scf('calculation.chk')
+mo_coeff = scf_data['mo_coeff']
+mo_energy = scf_data['mo_energy']
+mo_occ = scf_data['mo_occ']
 
-# 读取MO
-mo_coeff = scf.chkfile.load('calculation.chk', 'mo_coeff')
-mo_energy = scf.chkfile.load('calculation.chk', 'mo_energy')
-mo_occ = scf.chkfile.load('calculation.chk', 'mo_occ')
-
-# 读取密度
-dm = scf.chkfile.load('calculation.chk', 'dm')
+# Reconstruct the RHF/RKS density matrix from the saved orbitals.
+mf_chk = scf.RHF(mol_chk)
+dm = mf_chk.make_rdm1(mo_coeff, mo_occ)
 ```
 
-## 性能优化建议
+## Performance-Optimization Suggestions
 
-### 内存vs速度权衡
+### Memory-versus-Speed Tradeoff
 
 ```python
-# 大内存：存储所有积分
+# More memory: store all integrals
 mf.direct_scf = False
 
-# 小内存：即时计算积分
+# Less memory: evaluate integrals on demand
 mf.direct_scf = True
 ```
 
-### 基组选择
+### Basis-Set Selection
 
 ```python
-# 快速预计算
+# Fast preliminary calculation
 basis = 'sto-3g'
 
-# 标准计算
+# Standard calculation
 basis = 'def2-svp'
 
-# 高精度
+# High accuracy
 basis = 'def2-tzvp'
 
-# 关键精度
+# Highest accuracy
 basis = 'def2-qzvp'
 ```
 
-### 并行效率
+### Parallel Efficiency
 
 ```python
-# SCF并行：效率好
+# SCF parallelism: good efficiency
 mf.kernel()
 
-# 密度拟合：并行效率好
+# Density fitting: good parallel efficiency
 mf_df = mf.density_fit()
 
-# MP2/CCSD：内存限制，并行效率中等
+# MP2/CCSD: memory-limited, moderate parallel efficiency
 ```
 
-## PySCF扩展
+## Extending PySCF
 
-### 自定义哈密顿量
+### Custom Hamiltonian
 
 ```python
 import numpy as np
 
-# 1D Hubbard模型
+# 1D Hubbard model
 h1 = np.zeros((N, N))
 for i in range(N-1):
     h1[i, i+1] = h1[i+1, i] = -1.0
@@ -787,7 +786,7 @@ eri = np.zeros((N, N, N, N))
 for i in range(N):
     eri[i, i, i, i] = U
 
-# 构建SCF
+# Construct an SCF calculation
 mol = gto.M()
 mol.nelectron = N
 mf = scf.RHF(mol)
@@ -797,26 +796,26 @@ mf._eri = ao2mo.restore(8, eri, N)
 mf.kernel()
 ```
 
-### 与JAX集成
+### Integration with JAX
 
 ```python
 import jax
 import jax.numpy as jnp
 from pyscf.jax import scf as jax_scf
 
-# 转换SCF对象
+# Convert an SCF object
 mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g')
 mf = scf.RHF(mol)
 mf_jax = jax_scf.RHF(mol)
 
-# 自动微分梯度
+# Automatic-differentiation gradient
 grad_func = jax.grad(lambda coords: mf_jax.kernel()[0])
 grad = grad_func(coords)
 ```
 
-## 参考文献
+## References
 
-1. PySCF文档: https://pyscf.org/
+1. PySCF documentation: https://pyscf.org/
 2. PySCF GitHub: https://github.com/pyscf/pyscf
-3. PySCF示例: https://github.com/pyscf/pyscf/tree/master/examples
+3. PySCF examples: https://github.com/pyscf/pyscf/tree/master/examples
 4. Sun, Q. et al. "Recent developments in the PySCF program package." WIREs Comput. Mol. Sci. 2020.

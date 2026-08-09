@@ -1,30 +1,32 @@
 ---
 name: gaussian
-version: 2.0.0
-description: Gaussian 16 quantum chemistry software. Electronic structure calculations, geometry optimization, frequency analysis, TDDFT excited states, and more. Based on official Gaussian.com documentation.
-homepage: https://gaussian.com
-metadata:
-  category: computational_chemistry
-  tags: [quantum_chemistry, DFT, TDDFT, frequency, optimization, excited_states, ab_initio]
+description: Use when preparing, reviewing, or troubleshooting Gaussian 16 electronic-structure calculations, including optimization, frequencies, excited states, and wavefunction methods.
+license: MIT
+compatibility: Requires a separately licensed Gaussian 16 installation; remote and scheduler commands depend on the user's environment.
 ---
 
 # Gaussian 16 — Quantum Chemistry Software
 
 ## Overview
 
-Gaussian is the industry-standard quantum chemistry software for electronic structure calculations. It supports DFT (all major functionals), HF, MPn, CCSD(T), CASSCF, TDDFT, geometry optimization, frequency analysis, reaction pathways, and much more.
+Gaussian 16 is a general-purpose quantum-chemistry program for electronic
+structure calculations. Available methods and options depend on the licensed
+revision; consult its documentation before relying on a keyword or method.
 
-**Installed on:** marcus HPC cluster (remote server access via marcus2)
+Gaussian is proprietary software. Confirm that a licensed installation is
+available locally or on an authorized remote system before running a job.
 
 ---
 
-## Connection
+## Optional Remote Connection
 
 ```bash
-ssh -p 8722 openclaw@124.16.75.110   # Login to marcus2
-ssh marcus                               # Jump to compute node
-module load gaussian/g16.c01-avx2       # Load Gaussian 16 Rev. C.01
+ssh -p "$QC_PORT" "$QC_USER@$QC_HOST"
+module load "$GAUSSIAN_MODULE"  # Site-specific; omit when unnecessary.
 ```
+
+Keep host names, account names, ports, module names, and credentials in private
+shell or scheduler configuration rather than in a reusable skill.
 
 ---
 
@@ -365,107 +367,23 @@ D 1 2 3 4 180.0 F    # Scan dihedral angle 1-2-3-4 to 180°
 
 ---
 
-## Common Task Templates
+## Core Workflow
 
-### Ground-State Optimization + Frequency
-```
-%chk=opt_freq.chk
-%mem=60GB
-%nproc=64
-# opt freq b3lyp/6-31G**
-
-Molecule optimization
-0 1
-C  0.0  0.0  0.0
-...
-```
-
-### TDDFT Excited States
-```
-%chk=tddft.chk
-%mem=60GB
-%nproc=64
-# td=(nstates=10,singlets) b3lyp/6-31G*
-
-S1 vertical excitations
-0 1
-C  0.0  0.0  0.0
-...
-```
-
-### S1 Optimization + Vertical Emission
-```
-%chk=s1_opt.chk
-%mem=60GB
-%nproc=64
-# td=(nstates=5,root=1) b3lyp/6-31G* opt
-
-S1 optimization
-0 1
-... (ground-state optimized geometry)
-```
-
-```
-%chk=emission.chk
-%mem=60GB
-%nproc=64
-# b3lyp/6-31G* td=(root=1) geom=check
-
-S1 vertical emission
-0 1
-... (S1 optimized geometry)
-```
-
-### Solvent Effect (SMD)
-```
-%chk=smd.chk
-%mem=60GB
-%nproc=64
-# b3lyp/6-31G* scrf=(smd,solvent=acetonitrile)
-
-SMD solvent model
-0 1
-...
-```
-
-### CBS-QB3 Composite
-```
-%chk=cbs-qb3.chk
-%mem=60GB
-%nproc=64
-# cbs-qb3
-
-CBS-QB3 calculation
-0 1
-...
-```
-
-### CASSCF
-```
-%chk=cas.chk
-%mem=60GB
-%nproc=64
-# casSCF(10,8)/6-31G*
-
-CAS(10,8) — 10 electrons, 8 orbitals in active space
-0 1
-...
-```
-
-### ModRedundant Scan
-```
-%chk=scan.chk
-%mem=60GB
-%nproc=64
-# b3lyp/6-31G* opt=modredundant
-
-Dihedral scan
-0 1
-C 0 0 0
-C 1 2 1.4
-...
-1 2 3 4 90.0 S 20 5.0   # Scan dihedral 1-2-3-4, 20 steps, 5° each
-```
+1. Define the scientific target, molecular charge, spin multiplicity,
+   geometry source, environment, method, and basis set.
+2. Build the Link 0 section, route section, title, charge/multiplicity line, and
+   coordinates. Use the [worked input templates](WORKFLOWS.md) as starting
+   points, not as system-independent defaults.
+3. Run only on an authorized Gaussian installation. Preserve the exact input,
+   output, checkpoint, software revision, and execution environment.
+4. Check normal termination and the relevant convergence criteria. For a
+   claimed minimum, verify that no imaginary frequency remains; for a claimed
+   transition state, verify the intended single imaginary mode and use IRC when
+   the reaction-path assignment matters. Track the intended root during
+   excited-state optimization.
+5. Report method, basis, solvent model, charge, multiplicity, units, and any
+   unresolved warnings. The existence of an output file alone is not evidence
+   that the calculation succeeded.
 
 ---
 
@@ -508,7 +426,10 @@ unfchk filename.chk filename.fchk       # Alternative
 
 ## Official Keyword Index
 
-Full keyword list from gaussian.com/keywords/:
+See the repository's [Gaussian keyword reference](KEYWORDS.md) and the
+[official Gaussian keyword index](https://gaussian.com/keywords/).
+
+Representative keyword families:
 
 ADMP, BD, BOMD, CacheSize, CASSCF, CBS Methods, CBSExtrapolate, CCD and CCSD, Charge, ChkBasis, CID and CISD, CIS, CNDO, Complex, Constants, Counterpoise, CPHF, Density, DensityFit and NoDensityFit, DFT Methods, DFTB and DFTBA, EET, EOMCCSD, EPT, External, ExtraBasis & ExtraDensityBasis, Field, FMM, Force, Freq, Gen and GenECP, GenChk, Geom, GFInput, GFPrint, Gn Methods, Guess, GVB, HF, Huckel, INDO, Integral, IOp, IRC, IRCmax, Link0 Commands, LSDA, MaxDisk, MINDO3, MNDO, MM Methods, MP Methods, Name, NMR, ONIOM, Opt, Output, PBC, Polar, Population, Pressure, Prop, Pseudo, Punch, QCI, Restart, SAC-CI, Scale, Scan, SCF, SCRF, Semi-Empirical Methods, SP, Sparse, Stable, Symmetry, TD, Temperature, Test, TestMO, TrackIO, Transformation, Units, Volume, W1 Methods, Window Keyword and Frozen Core Options, ZIndo
 
@@ -543,6 +464,6 @@ L  0  0.0 0.0 0.0 q=+1  # Low layer
 
 ### PBC (Periodic Boundary Conditions)
 ```
-# pbc载体                 # Enable PBC calculations
+# pbc                    # Enable PBC calculations
 # pbe0/pcs Solvent=...   # With SCRF
 ```

@@ -1,138 +1,172 @@
 ---
 name: multiwfn
-version: 1.0.0
-description: Multiwfn 波函数分析工具。支持轨道分析、光谱绘制、拓扑分析等。
-homepage: http://sobereva.com/multiwfn
-metadata:
-  category: computational_chemistry
-  tags: [wavefunction_analysis, orbitals, spectrum, topology]
+description: Use when analyzing molecular wavefunctions with Multiwfn, including orbital composition, population and bond-order analysis, spectra, density topology, excited states, and weak interactions.
+license: MIT
+compatibility: Requires a local Multiwfn installation and a supported wavefunction file; remote-copy examples assume an OpenSSH-compatible scp command.
 ---
 
-# Multiwfn 波函数分析技能
+# Multiwfn Wavefunction Analysis
 
-## 概述
+## Overview
 
-Multiwfn 是一个强大的波函数分析工具，用于分子轨道分析、光谱绘制、电子密度拓扑分析等。
+Multiwfn is a wavefunction-analysis program for molecular-orbital analysis,
+spectrum generation, electron-density topology, and related tasks.
 
-## 安装位置
+## Installation and executable discovery
 
-- **本地:** `/opt/homebrew/bin/Multiwfn`
-- **版本:** 3.8 (2026-Jan-7)
-- **开发者:** Tian Lu (北京科音自然科学研究中心)
-
-## 引用要求
-
-使用 Multiwfn 必须引用:
-1. Tian Lu, Feiwu Chen, J. Comput. Chem., 33, 580 (2012) DOI: 10.1002/jcc.22885
-2. Tian Lu, J. Chem. Phys., 161, 082503 (2024) DOI: 10.1063/5.0216272
-
-## 支持的输入文件
-
-| 格式 | 说明 |
-|------|------|
-| .fchk / .fch | Gaussian 格式化检查点（推荐） |
-| .chk | Gaussian 检查点 |
-| .wfn | 波函数文件 |
-| .molden | Molden 格式 |
-| .xyz | 分子坐标 |
-| .cub / .cube | Cube 文件 |
-
-## 主菜单功能
-
-### 0 - 查看分子结构和轨道
-
-交互式 3D 分子可视化，可查看分子轨道。
-
-### 1 - 点属性计算
-
-计算空间中某点的各种属性（电子密度、梯度、拉普拉斯等）。
-
-### 2 - 拓扑分析 (AIM)
-
-分析电子密度的临界点 (CP)，用于化学键分析。
-
-### 3 - 线属性图
-
-沿某条线绘制属性变化（如键轴上的电子密度）。
-
-### 4 - 平面图
-
-在某个平面上绘制等高线图（如电子密度、轨道）。
-
-### 5 - 空间网格数据
-
-计算 3D 网格数据，生成 Cube 文件。
-
-### 6 - 检查/修改波函数
-
-查看轨道信息、能量、修改波函数。
-
-### 7 - 布居分析
-
-Mulliken、Hirshfeld、ADCH 等原子电荷计算。
-
-### 8 - 轨道成分分析
-
-分析分子轨道的原子/片段贡献。
-
-### 9 - 键级分析
-
-计算各种键级（Mayer、Wiberg 等）。
-
-### 10 - DOS/PDOS
-
-态密度、投影态密度、光电子能谱。
-
-### 11 - 光谱绘制
-
-绘制 IR、Raman、UV-Vis、ECD、NMR 光谱。
-
-### 12 - 分子表面分析
-
-计算分子表面的静电势、平均局部离子化能等。
-
-### 18 - 激发态分析
-
-电子激发分析，空穴-电子分析，电荷转移分析。
-
-### 20 - 弱相互作用可视化
-
-RDG、NCI 分析，可视化分子间相互作用。
-
-## 常用功能编号速查
-
-| 功能 | 菜单路径 |
-|------|----------|
-| 查看轨道能量 | 0 → q |
-| UV-Vis 光谱 | 11 → 1 |
-| IR 光谱 | 11 → 2 |
-| 原子电荷 | 7 → 1/2/3 |
-| 轨道成分 | 8 → 1 |
-| 键级 | 9 → 1 |
-| DOS | 10 → 1 |
-| 分子表面 | 12 |
-| RDG 分析 | 20 → 1 |
-| 激发态分析 | 18 |
-
-## 与 Gaussian 配合使用
-
-1. 用 Gaussian 完成 DFT/TDDFT 计算
-2. 用 formchk 转换 .chk → .fchk
-3. 用 Multiwfn 分析 .fchk 文件
-
-## 从远程服务器获取文件
+Locate an existing installation before running a workflow:
 
 ```bash
-# 下载 fchk 文件到本地
-scp -P 8722 openclaw@124.16.75.110:/path/to/molecule.fchk ./
+command -v Multiwfn
 ```
 
-## 官方资源
+If the executable is not already on `PATH`, point `MULTIWFN_HOME` at the
+installation directory and add it explicitly:
 
-- 官网: http://sobereva.com/multiwfn
-- 英文论坛: http://sobereva.com/wfnbbs
-- 中文论坛: http://bbs.keinsci.com/wfn
+```bash
+export MULTIWFN_HOME="/path/to/Multiwfn_3.8"
+export PATH="${MULTIWFN_HOME}:${PATH}"
+command -v Multiwfn
+```
 
----
+This avoids relying on a machine-specific Homebrew or system path. The menu
+sequences in this repository were recorded for Multiwfn 3.8; verify them
+against the installed release. Multiwfn is developed by Tian Lu at the Beijing
+Kein Research Center for Natural Sciences.
 
-*创建日期: 2026-03-10*
+## Citation requirements
+
+Publications that use Multiwfn should cite:
+
+1. Tian Lu and Feiwu Chen, *J. Comput. Chem.* **33**, 580 (2012),
+   DOI: [10.1002/jcc.22885](https://doi.org/10.1002/jcc.22885).
+2. Tian Lu, *J. Chem. Phys.* **161**, 082503 (2024),
+   DOI: [10.1063/5.0216272](https://doi.org/10.1063/5.0216272).
+
+## Supported input files
+
+| Format | Description |
+|--------|-------------|
+| `.fchk` / `.fch` | Gaussian formatted checkpoint file; recommended |
+| `.wfn` | Wavefunction file |
+| `.molden` | Molden-format file |
+| `.xyz` | Molecular coordinates |
+| `.cub` / `.cube` | Gaussian cube file |
+
+Convert a binary Gaussian `.chk` file to `.fchk` with the matching `formchk`
+utility before analysis. Coordinate-only and scalar-grid inputs do not contain
+the full wavefunction information required by every menu function.
+
+## Main-menu functions
+
+### 0 - Molecular structure and orbitals
+
+Open the interactive 3D molecular viewer and inspect molecular orbitals.
+
+### 1 - Point-property calculation
+
+Calculate properties at a point in space, including electron density,
+gradients, and the Laplacian.
+
+### 2 - Topology analysis (AIM)
+
+Analyze electron-density critical points (CPs) for chemical-bond analysis.
+
+### 3 - Line-property plot
+
+Plot how a property changes along a line, such as the electron density along a
+bond axis.
+
+### 4 - Plane plot
+
+Draw a contour plot on a selected plane, for example for electron density or
+an orbital.
+
+### 5 - Spatial grid data
+
+Calculate three-dimensional grid data and generate a cube file.
+
+### 6 - Inspect or modify a wavefunction
+
+Inspect orbital information and energies, or modify the wavefunction.
+
+### 7 - Population analysis
+
+Calculate atomic charges with Mulliken, Hirshfeld, ADCH, and related schemes.
+
+### 8 - Orbital-composition analysis
+
+Analyze atomic or fragment contributions to molecular orbitals.
+
+### 9 - Bond-order analysis
+
+Calculate Mayer, Wiberg, and other bond-order measures.
+
+### 10 - DOS and PDOS
+
+Generate the density of states, projected density of states, or a
+photoelectron spectrum.
+
+### 11 - Spectrum generation
+
+Generate IR, Raman, UV-Vis, ECD, and NMR spectra.
+
+### 12 - Molecular-surface analysis
+
+Calculate electrostatic potential, average local ionization energy, and other
+properties on a molecular surface.
+
+### 18 - Excited-state analysis
+
+Analyze electronic excitations, hole-electron distributions, and charge
+transfer.
+
+### 20 - Weak-interaction visualization
+
+Perform reduced-density-gradient (RDG) and noncovalent-interaction (NCI)
+analyses to visualize intermolecular interactions.
+
+## Common menu paths
+
+| Task | Menu path |
+|------|-----------|
+| Inspect orbital energies | `0 -> q` |
+| UV-Vis spectrum | `11 -> 1` |
+| IR spectrum | `11 -> 2` |
+| Atomic charges | `7 -> 1/2/3` |
+| Orbital composition | `8 -> 1` |
+| Bond order | `9 -> 1` |
+| DOS | `10 -> 1` |
+| Molecular surface | `12` |
+| RDG analysis | `20 -> 1` |
+| Excited-state analysis | `18` |
+
+## Gaussian-to-Multiwfn workflow
+
+1. Complete the DFT or TDDFT calculation with Gaussian.
+2. Convert the `.chk` file to `.fchk` with `formchk`.
+3. Analyze the `.fchk` file with Multiwfn.
+
+## Copying a file from a remote server
+
+Set the connection values in the shell rather than embedding private host or
+account details in documentation:
+
+```bash
+: "${QC_USER:?Set QC_USER}"
+: "${QC_HOST:?Set QC_HOST}"
+: "${QC_PORT:?Set QC_PORT}"
+
+scp -P "${QC_PORT}" \
+  "${QC_USER}@${QC_HOST}:/path/to/molecule.fchk" ./
+```
+
+## Worked example
+
+- [Benzene analysis workflow](references/benzene-analysis.md)
+
+## Official resources
+
+- [Multiwfn website](http://sobereva.com/multiwfn)
+- [English-language Multiwfn forum](http://sobereva.com/wfnbbs)
+- [Chinese-language wavefunction-analysis forum](http://bbs.keinsci.com/wfn)

@@ -1,0 +1,21 @@
+name: Validate repository
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run contract tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate repository content
+        run: python3 scripts/validate_repository.py .

@@ -1,6 +1,12 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
 .env
 .env/*
 # Data
@@ -11,6 +17,7 @@ Miniconda3.sh
 # Multiwfn temp files
 bndmat.txt
 *.cub
+*.cube
 *.grd
 
 # xTB temp files
